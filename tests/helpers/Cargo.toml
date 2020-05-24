@@ -1,0 +1,10 @@
+[package]
+name = "testhelpers"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Testing helpers"
+
+[[bin]]
+name = "testhelpers"
+path = "src/main.rs"

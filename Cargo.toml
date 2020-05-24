@@ -1,5 +1,5 @@
 [workspace]
-members = [ "src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool" ]
+members = [ "src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool", "tests/helpers" ]
 default-members = ["src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool" ]
 
 [profile.release]
