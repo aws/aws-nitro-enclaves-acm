@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+# Copyright (c) 2020 Amazon.com Inc. All Rights Reserved.
+# AMAZON.COM CONFIDENTIAL
+
+# Dev container version. This should be incremented every time a change is made to the
+# dev container Dockerfile.
+DEVCTR_VERSION="1"
+
+MY_NAME="vtokrs devtool"
+DEVCTR_IMG="vtokrs-dev:v$DEVCTR_VERSION"
+ENCLAVE_CTR="vtokrs-enclave"
+PARENT_CTR="vtokrs-parent"
+VTOK_SO_NAME="libvtok_rs.so"
+
+THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
+VTOK_SRC_DIR="$(cd "$THIS_DIR/.." && pwd)"
+VTOK_BUILD_DIR="$VTOK_SRC_DIR/build"
+VTOK_SO_PATH="$VTOK_BUILD_DIR/target/debug/$VTOK_SO_NAME"
+DEVCTR_DIR="$VTOK_SRC_DIR/tools/devctr"
+CTR_SRC_DIR="/vtok"
+CTR_BUILD_DIR="$CTR_SRC_DIR/build"
+CTR_SO_PATH="$CTR_BUILD_DIR/target/debug/$VTOK_SO_NAME"
+CTR_P11_SOCK_PATH="$CTR_BUILD_DIR/p11.sock"
+
+USAGE="\
+$MY_NAME
+Usage: $(basename "$0") <command>
+
+Commands:
+
+   build
+         Build the vtoken shared library $VTOK_SO_NAME.
+
+   clean
+         Clean up all build artefacts produced by \`$0 build\`.
+
+   mkdevctr
+         Build the dev container image locally.
+
+   runparent
+        Run the parent instance container, dropping to a shell inside the
+        container.
+        Note: before starting the parent, an enclave container has to be running.
+              The enclave container will open the p11-kit server socket to which
+              the parent-side p11-kit client will connect.
+
+   runenclave
+        Run the enclave container, starting p11-kit server in foreground mode.
+        The vtok log will be shown at stderr.
+
+   shell
+        Drop to a BASH shell inside the dev container, with all the pre-build
+        setup already performed (source dir bind-mounted and all).
+"
+
+
+# Send a decorated message to stdout, followed by a new line
+#
+say() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Send a decorated message to stdout, without a trailing new line
+#
+say_noln() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo -n "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Send a text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a warning-highlighted text to stdout
+say_warn() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 3)[$MY_NAME] $*$(tput sgr0)" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit $code
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Make sure the dirs we need to build and run/test are there.
+# Exit with an error message if that's no the case. Upon returning from this call,
+# the caller can be certain the build dirs are available.
+#
+ensure_build_dirs() {
+    mkdir -p "$VTOK_BUILD_DIR"
+    ok_or_die "Unable to create dir $VTOK_BUILD_DIR"
+}
+
+# Check if Docker is available and exit if it's not.
+# Upon returning from this call, the caller can be certain Docker is available.
+#
+ensure_docker() {
+    which docker > /dev/null 2>&1
+    ok_or_die "Docker not found. Aborting." \
+        "Please make sure you have Docker (http://docker.com) installed" \
+        "and properly configured."
+
+    docker ps > /dev/null 2>&1
+    ok_or_die "Error accessing Docker. Please make sure the Docker daemon" \
+        "is running and that you are part of the docker group." \
+        "For more information, see" \
+        "https://docs.docker.com/install/linux/linux-postinstall/"
+}
+
+# Check if the dev container image has been built, or build it otherwise.
+#
+ensure_devctr() {
+    ensure_docker
+    [[ $(docker images -q "$DEVCTR_IMG" | wc -l) -gt 0 ]] || {
+        say "Dev container image $DEVCTR_IMG is missing. Build it now?"
+        get_user_confirmation || die "Aborted."
+        cmd_mkdevctr
+        ok_or_die "Dev container build failed."
+    }
+}
+
+# Prompt the user for confirmation before proceeding.
+# Args:
+#   $1  prompt text.
+#       Default: Continue? (y/n)
+#   $2  confirmation input.
+#       Default: y
+# Return:
+#   exit code 0 for successful confirmation
+#   exit code != 0 if the user declined
+#
+get_user_confirmation() {
+    # Fail if STDIN is not a terminal (there's no user to confirm anything)
+    [[ -t 0 ]] || return 1
+
+    # Otherwise, ask the user
+    #
+    msg=$([ -n "$1" ] && echo -n "$1" || echo -n "Continue? (y/n) ")
+    yes=$([ -n "$2" ] && echo -n "$2" || echo -n "y")
+    say_noln "$msg"
+    read c && [ "$c" = "$yes" ] && return 0
+    return 1
+}
+
+# Check if a container (given by name) is running, and, if so, echo its ID at
+# stdout.
+# Args:
+#   $1  container name
+# Return:
+#   stdout: container ID
+#   exit code: 0 if the container was found running;
+#              != 0 otherwise
+get_running_container_id() {
+    ctr_name="$1"
+    ctr_id=$(docker ps --filter "name=$ctr_name" --format "{{.ID}}")
+    if [[ -z "$ctr_id" ]]; then
+        return 1
+    fi
+    echo "$ctr_id"
+}
+
+cmd_help() {
+    echo "$USAGE"
+}
+
+# Build the dev container image locally.
+#
+cmd_mkdevctr() {
+    ensure_docker
+    docker build -t "$DEVCTR_IMG" \
+        --build-arg USER=$(whoami) \
+        --build-arg USER_ID=$(id -u) \
+        --build-arg GROUP_ID=$(id -g) \
+        "$DEVCTR_DIR"
+    ok_or_die "Error building dev container."
+    say "Successfully built container image $DEVCTR_IMG."
+}
+
+# Build the vtok shared lib.
+#
+cmd_build() {
+    ensure_devctr
+    ensure_build_dirs
+    docker run --rm -it \
+        -v "${VTOK_SRC_DIR}:${CTR_SRC_DIR}" \
+        "$DEVCTR_IMG" \
+        cargo build
+    ok_or_die "Build failed."
+    say "Built: $VTOK_SO_PATH"
+}
+
+# Clean-up build artefacts generated by `$0 build`.
+#
+cmd_clean() {
+    ensure_devctr
+    docker run --rm -it \
+        -v "$VTOK_SRC_DIR:$CTR_SRC_DIR" \
+        "$DEVCTR_IMG" \
+       cargo clean 
+    ok_or_die "Clean-up failed."
+    say "Cleaned up."
+}
+
+# Run the dev container in enclave mode (i.e. with the p11-kit server having loaded our
+# vtoken shared moduled, and listening on its Unix socket for client connections).
+cmd_runenclave() {
+    ensure_devctr
+
+    ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
+    [[ $? = 0 ]] \
+        && die "An enclave container is already running with id $ctr_id." \
+            "Kill it, then try again."
+
+    cmd_build
+    ok_or_die "Build failed."
+
+    docker run --rm -it \
+        --name "$ENCLAVE_CTR" \
+        -v "$VTOK_SRC_DIR:$CTR_SRC_DIR" \
+        "$DEVCTR_IMG" \
+        p11-kit server \
+            -n "unix:path=$CTR_P11_SOCK_PATH" \
+            --provider "$CTR_SO_PATH" \
+            -f -v \
+            "pkcs11:"
+}
+
+# Run the dev container, in parent instance mode (i.e. with the p11-kit client configured
+# to look for the vtok shared module over the Unix socket exposed by the enclave container).
+cmd_runparent() {
+    ensure_devctr
+
+    ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
+    ok_or_die "Enclave container is not running. Use \`$0 runenclave\` to start it."
+    
+    docker run --rm -it \
+        --name "$PARENT_CTR" \
+        -v "$VTOK_SRC_DIR:$CTR_SRC_DIR" \
+        "$DEVCTR_IMG" \
+        /bin/bash -c "\
+            sudo /bin/sh -c \"echo remote:unix:path=$CTR_P11_SOCK_PATH \
+                > /etc/pkcs11/modules/vtok.module && \
+                echo module:$VTOK_SO_NAME \
+                >> /etc/pkcs11/modules/vtok.module\"; \
+            PS1=\"[\\u@vtok-parent:\\w]# \" /bin/bash \
+            "
+}
+
+# Drop to a generic / debug shell inside the dev container. Bind-mounts are active, and the
+# environment is set up. Use this to debug / manually inspect whatever issues.
+cmd_shell() {
+    ensure_devctr
+    ensure_build_dirs
+
+    say "Dropping to dev container shell as user $(whoami). Use \`sudo\` if you need it."
+    docker run --rm -it \
+        -v "$VTOK_SRC_DIR:$CTR_SRC_DIR" \
+        --env PS1="[\\u@vtok-dev:\\w]# " \
+        "$DEVCTR_IMG" \
+        /bin/bash
+}
+
+main() {
+    cmd="$1"
+
+    if [ -z "$cmd" ]; then
+        die "No command provided. Please use \`$0 help\` for help."
+    fi
+
+    declare -f "cmd_$1" > /dev/null
+    ok_or_die "Unknown command: $1. Please use \`$0 help\` for help."
+
+    cmd_$1
+}
+
+main "${@}"
