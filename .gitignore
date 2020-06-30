@@ -1,0 +1,4 @@
+/.ccls-cache
+/.ccls
+/build
+Cargo.lock
