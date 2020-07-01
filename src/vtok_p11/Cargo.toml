@@ -1,0 +1,18 @@
+[package]
+name = "vtok_p11"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Nitro vToken pkcs#11 library"
+
+[lib]
+name = "vtok_p11"
+crate-type = ["cdylib"]
+
+[dependencies]
+libc = "0.2"
+lazy_static = "1.4.0"
+
+[dependencies.log]
+version = "0.4.8"
+features = ["std"]

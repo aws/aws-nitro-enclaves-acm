@@ -1,21 +1,6 @@
-[package]
-name = "vtok-rs"
-version = "0.1.0"
-authors = ["Dan Horobeanu <dhr@amazon.com>"]
-edition = "2018"
-
-[lib]
-name = "vtok_rs"
-crate-type = ["cdylib"]
+[workspace]
+members = [ "src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool" ]
+default-members = ["src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool" ]
 
 [profile.release]
 lto = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-lazy_static = "1.4.0"
-
-[dependencies.log]
-version = "0.4.8"
-features = ["std"]

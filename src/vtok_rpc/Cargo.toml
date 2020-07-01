@@ -1,0 +1,13 @@
+[package]
+name = "vtok_rpc"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Nitro vToken RPC helpers"
+
+[dependencies]
+libc = "0.2"
+
+[lib]
+name = "vtok_rpc"
+path = "src/lib.rs"
