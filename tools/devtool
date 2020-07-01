@@ -7,10 +7,11 @@
 DEVCTR_VERSION="1"
 
 MY_NAME="vtokrs devtool"
-DEVCTR_IMG="vtokrs-dev:v$DEVCTR_VERSION"
+DEVCTR_IMG="vtokp11-dev:v$DEVCTR_VERSION"
 ENCLAVE_CTR="vtokrs-enclave"
 PARENT_CTR="vtokrs-parent"
-VTOK_SO_NAME="libvtok_rs.so"
+VTOK_SO_NAME="libvtok_p11.so"
+ENCLAVE_INIT="start_unix.sh"
 
 THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
 VTOK_SRC_DIR="$(cd "$THIS_DIR/.." && pwd)"
@@ -21,6 +22,7 @@ CTR_SRC_DIR="/vtok"
 CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_SO_PATH="$CTR_BUILD_DIR/target/debug/$VTOK_SO_NAME"
 CTR_P11_SOCK_PATH="$CTR_BUILD_DIR/p11.sock"
+ENCLAVE_CTR_INIT="$CTR_SRC_DIR/tools/enclave/$ENCLAVE_INIT"
 
 USAGE="\
 $MY_NAME
@@ -241,11 +243,7 @@ cmd_runenclave() {
         --name "$ENCLAVE_CTR" \
         -v "$VTOK_SRC_DIR:$CTR_SRC_DIR" \
         "$DEVCTR_IMG" \
-        p11-kit server \
-            -n "unix:path=$CTR_P11_SOCK_PATH" \
-            --provider "$CTR_SO_PATH" \
-            -f -v \
-            "pkcs11:"
+        "$ENCLAVE_CTR_INIT"
 }
 
 # Run the dev container, in parent instance mode (i.e. with the p11-kit client configured

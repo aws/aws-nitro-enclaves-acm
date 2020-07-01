@@ -1,0 +1,13 @@
+[package]
+name = "vtok_tool"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Nitro vToken Tool"
+
+[dependencies]
+vtok_rpc = { path = "../vtok_rpc" }
+
+[[bin]]
+name = "nitro-vtoken"
+path = "src/main.rs"
