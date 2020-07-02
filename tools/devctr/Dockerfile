@@ -24,7 +24,9 @@ RUN dnf -y install \
 		opensc \
         openssl-pkcs11 \
         p11-kit-server \
-        sudo
+        sudo \
+        diffutils \
+        procps
 
 # Configure nginx.
 #
