@@ -123,10 +123,7 @@ impl Session {
 
     /// Enumeration is already in progress
     pub fn enum_active(&self) -> bool {
-        match &self.enum_ctx {
-            Some(_) => true,
-            None => false,
-        }
+        self.enum_ctx.is_some()
     }
 
     pub fn enum_finalize(&mut self) -> Result<()> {
@@ -181,7 +178,7 @@ impl Session {
         self.check_user_logged_in()?;
         let pkey = self.public_key_for_mech(mech, key_handle)?;
         self.encrypt_ctx = Some(if mech.is_multipart() {
-            Err(Error::MechanismInvalid)?
+            return Err(Error::MechanismInvalid);
         } else {
             Box::new(DirectEncryptCtx::new(mech, pkey).map_err(Error::CryptoError)?)
         });
@@ -196,7 +193,7 @@ impl Session {
         self.check_user_logged_in()?;
         let pkey = self.private_key_for_mech(mech, key_handle)?;
         self.decrypt_ctx = Some(if mech.is_multipart() {
-            Err(Error::MechanismInvalid)?
+            return Err(Error::MechanismInvalid);
         } else {
             Box::new(DirectDecryptCtx::new(mech, pkey).map_err(Error::CryptoError)?)
         });

@@ -45,11 +45,7 @@ impl CkRawAttr {
             if bytes.len() > (*self.0).ulValueLen as usize {
                 return Err(Error::BufTooSmall);
             }
-            std::ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                (*self.0).pValue as *mut u8,
-                bytes.len(),
-            );
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), (*self.0).pValue as *mut u8, bytes.len());
         }
         Ok(())
     }
@@ -69,7 +65,7 @@ impl CkRawAttrTemplate {
         if index >= self.count {
             return None;
         }
-        Some(unsafe { CkRawAttr::from_raw_ptr_unchecked(self.ptr.offset(index as isize)) })
+        Some(unsafe { CkRawAttr::from_raw_ptr_unchecked(self.ptr.add(index)) })
     }
 
     pub fn len(&self) -> usize {

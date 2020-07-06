@@ -1,9 +1,9 @@
 use crate::backend::Mechanism;
 
 use super::ffi;
-use super::{config_evp_pkey_ctx, mech_type_to_evp_md, ecdsa_sig_der_to_ckrs};
-use super::{Error, FfiBox, OpCtxState, Pkey};
 use super::key::KeyAlgo;
+use super::{config_evp_pkey_ctx, ecdsa_sig_der_to_ckrs, mech_type_to_evp_md};
+use super::{Error, FfiBox, OpCtxState, Pkey};
 
 pub trait SignCtx: Send {
     fn update(&mut self, data: &[u8]) -> Result<(), Error>;
@@ -191,7 +191,7 @@ impl SignCtx for DirectSignCtx {
 
         match self.algo {
             KeyAlgo::Ec => ecdsa_sig_der_to_ckrs(sig.as_slice()),
-            KeyAlgo::Rsa => Ok(sig)
+            KeyAlgo::Rsa => Ok(sig),
         }
     }
 

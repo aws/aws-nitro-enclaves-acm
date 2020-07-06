@@ -51,9 +51,9 @@ pub extern "C" fn C_FindObjects(
     match session.enum_next_chunk(ulMaxObjectCount as usize) {
         Some(chunk) => {
             info!("C_FindObjects returning count={}", chunk.len());
-            for i in 0..chunk.len() {
+            for (i, _obj) in chunk.iter().enumerate() {
                 unsafe {
-                    ptr::write(phObject.offset(i as isize), chunk[i].into());
+                    ptr::write(phObject.add(i), chunk[i].into());
                 };
             }
             unsafe {
@@ -121,7 +121,7 @@ pub extern "C" fn C_GetObjectSize(
 
     lock_session!(hSession, session, _src);
 
-    if let Some(_) = session.object(hObject.into()) {
+    if session.object(hObject.into()).is_some() {
         // The tokens do not export memory consumption info
         // thus neither token objects should. We just implement this
         // function for standard compliance and testing.

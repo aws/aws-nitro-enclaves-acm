@@ -115,7 +115,6 @@ impl PartialEq<Attr> for Attr {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub enum ObjectKind {
     RsaPrivateKey(String),
@@ -134,8 +133,14 @@ pub struct Object {
 impl Object {
     pub fn new_mechanism(mech: Mechanism) -> Self {
         let mut attrs = HashMap::new();
-        attrs.insert(pkcs11::CKA_CLASS, Attr::from_ck_object_class(pkcs11::CKO_MECHANISM));
-        attrs.insert(pkcs11::CKA_MECHANISM_TYPE, Attr::from_ck_mechanism_type(mech.ck_type()));
+        attrs.insert(
+            pkcs11::CKA_CLASS,
+            Attr::from_ck_object_class(pkcs11::CKO_MECHANISM),
+        );
+        attrs.insert(
+            pkcs11::CKA_MECHANISM_TYPE,
+            Attr::from_ck_mechanism_type(mech.ck_type()),
+        );
         Self {
             kind: ObjectKind::Mechanism(mech),
             attrs,
@@ -144,8 +149,14 @@ impl Object {
 
     pub fn new_rsa_private_key(info: RsaKeyInfo) -> Self {
         let mut attrs = HashMap::new();
-        attrs.insert(pkcs11::CKA_CLASS, Attr::from_ck_object_class(pkcs11::CKO_PRIVATE_KEY));
-        attrs.insert(pkcs11::CKA_KEY_TYPE, Attr::from_ck_key_type(pkcs11::CKK_RSA));
+        attrs.insert(
+            pkcs11::CKA_CLASS,
+            Attr::from_ck_object_class(pkcs11::CKO_PRIVATE_KEY),
+        );
+        attrs.insert(
+            pkcs11::CKA_KEY_TYPE,
+            Attr::from_ck_key_type(pkcs11::CKK_RSA),
+        );
         attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
         attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
         attrs.insert(pkcs11::CKA_PRIVATE, Attr::CK_TRUE);
@@ -177,8 +188,14 @@ impl Object {
 
     pub fn new_rsa_public_key(info: RsaKeyInfo) -> Self {
         let mut attrs = HashMap::new();
-        attrs.insert(pkcs11::CKA_CLASS, Attr::from_ck_object_class(pkcs11::CKO_PUBLIC_KEY));
-        attrs.insert(pkcs11::CKA_KEY_TYPE, Attr::from_ck_key_type(pkcs11::CKK_RSA));
+        attrs.insert(
+            pkcs11::CKA_CLASS,
+            Attr::from_ck_object_class(pkcs11::CKO_PUBLIC_KEY),
+        );
+        attrs.insert(
+            pkcs11::CKA_KEY_TYPE,
+            Attr::from_ck_key_type(pkcs11::CKK_RSA),
+        );
         attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
         attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
         attrs.insert(pkcs11::CKA_PRIVATE, Attr::CK_FALSE);
@@ -204,7 +221,10 @@ impl Object {
 
     pub fn new_ec_private_key(info: EcKeyInfo) -> Self {
         let mut attrs = HashMap::new();
-        attrs.insert(pkcs11::CKA_CLASS, Attr::from_ck_object_class(pkcs11::CKO_PRIVATE_KEY));
+        attrs.insert(
+            pkcs11::CKA_CLASS,
+            Attr::from_ck_object_class(pkcs11::CKO_PRIVATE_KEY),
+        );
         attrs.insert(pkcs11::CKA_KEY_TYPE, Attr::from_ck_key_type(pkcs11::CKK_EC));
         attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
         attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
@@ -228,7 +248,10 @@ impl Object {
 
     pub fn new_ec_public_key(info: EcKeyInfo) -> Self {
         let mut attrs = HashMap::new();
-        attrs.insert(pkcs11::CKA_CLASS, Attr::from_ck_object_class(pkcs11::CKO_PUBLIC_KEY));
+        attrs.insert(
+            pkcs11::CKA_CLASS,
+            Attr::from_ck_object_class(pkcs11::CKO_PUBLIC_KEY),
+        );
         attrs.insert(pkcs11::CKA_KEY_TYPE, Attr::from_ck_key_type(pkcs11::CKK_EC));
         attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
         attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
@@ -305,7 +328,7 @@ impl Object {
                             raw_attr.set_len(pkcs11::CK_UNAVAILABLE_INFORMATION);
                             continue;
                         }
-                        a => raw_attr.set_val_bytes(a.as_bytes())
+                        a => raw_attr.set_val_bytes(a.as_bytes()),
                     };
                     match sres {
                         Err(UtilError::BufTooSmall) => {
