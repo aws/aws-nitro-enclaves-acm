@@ -69,7 +69,7 @@ impl Pkey {
     pub fn sig_len_ck(&self) -> Result<usize> {
         match self.algo()? {
             KeyAlgo::Ec => Ok((self.num_bits()? + 7) / 8 * 2),
-            KeyAlgo::Rsa => self.sig_len()
+            KeyAlgo::Rsa => self.sig_len(),
         }
     }
 
@@ -125,7 +125,7 @@ impl Pkey {
             let vec = unsafe { std::slice::from_raw_parts(out_ptr, len as usize).to_vec() };
             return Ok(vec);
         }
-        return Err(Error::GeneralError);
+        Err(Error::GeneralError)
     }
 
     pub fn ec_params_x962(&self) -> Result<Vec<u8>> {

@@ -89,7 +89,7 @@ impl Token {
             ulFreePrivateMemory: pkcs11::CK_UNAVAILABLE_INFORMATION,
             hardwareVersion: defs::TOKEN_HARDWARE_VERSION,
             firmwareVersion: defs::TOKEN_FIRMWARE_VERSION,
-            utcTime: ck_padded_str!("", 16),
+            utcTime: ck_padded_str!(defs::TOKEN_UTC_TIME, 16),
         }
     }
 
@@ -97,11 +97,7 @@ impl Token {
         if self.sessions.len() >= defs::TOKEN_MAX_SESSIONS as usize {
             return Err(Error::SessionCount);
         }
-        let db_clone = self
-            .db
-            .as_ref()
-            .map(|db| db.clone())
-            .ok_or(Error::TokenUninit)?;
+        let db_clone = self.db.as_ref().cloned().ok_or(Error::TokenUninit)?;
         self.sessions.insert(
             handle,
             Arc::new(Mutex::new(Session::new(self.slot_id, db_clone))),
@@ -121,7 +117,7 @@ impl Token {
     }
 
     pub fn session(&self, handle: pkcs11::CK_SESSION_HANDLE) -> Option<Arc<Mutex<Session>>> {
-        self.sessions.get(&handle).map(|s| s.clone())
+        self.sessions.get(&handle).cloned()
     }
 
     pub fn login(&self, session_handle: pkcs11::CK_SESSION_HANDLE, pin: &str) -> Result<()> {

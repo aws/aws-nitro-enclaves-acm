@@ -40,6 +40,7 @@ mod defs {
     pub const TOKEN_MIN_PIN_LEN: pkcs11::CK_ULONG = 4;
     pub const TOKEN_HARDWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const TOKEN_FIRMWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
+    pub const TOKEN_UTC_TIME: &str = "";
 
     pub const TOKEN_MECH_LIST: [Mechanism; 24] = [
         Mechanism::Digest(MechDigest::Sha1),

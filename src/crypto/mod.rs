@@ -202,11 +202,13 @@ pub enum OpCtxState {
 }
 
 fn bytes_to_bignum(src: &[u8]) -> Result<FfiBox<ffi::BIGNUM>> {
-    FfiBox::new(unsafe { ffi::BN_bin2bn(
-        src.as_ptr(),
-        src.len() as ffi::c_size_t,
-        std::ptr::null_mut(),
-    )})
+    FfiBox::new(unsafe {
+        ffi::BN_bin2bn(
+            src.as_ptr(),
+            src.len() as ffi::c_size_t,
+            std::ptr::null_mut(),
+        )
+    })
 }
 
 fn bignum_to_vec(bn: *const ffi::BIGNUM) -> Result<Vec<u8>> {
@@ -214,7 +216,7 @@ fn bignum_to_vec(bn: *const ffi::BIGNUM) -> Result<Vec<u8>> {
         return Err(Error::GeneralError);
     }
     let len = unsafe { ffi::BN_num_bytes(bn) };
-    if len <= 0 {
+    if len == 0 {
         return Err(Error::GeneralError);
     }
     let mut ret = vec![0u8; len as usize];
@@ -225,7 +227,6 @@ fn bignum_to_vec(bn: *const ffi::BIGNUM) -> Result<Vec<u8>> {
     }
     Ok(ret)
 }
-
 
 fn mech_type_to_evp_md(mech_type: pkcs11::CK_MECHANISM_TYPE) -> Result<*const ffi::EVP_MD> {
     match mech_type {
@@ -267,19 +268,13 @@ fn mgf_to_evp_md(mgf: pkcs11::CK_RSA_PKCS_MGF_TYPE) -> Result<*const ffi::EVP_MD
 /// Convert an ECDSA signature from the Cryptoki [R,S] format to DER.
 /// R or S are 0-padded so that each of them takes exactly half of the signature.
 fn ecdsa_sig_ckrs_to_der(ckrs: &[u8]) -> Result<Vec<u8>> {
-
-    let mut bn_r = bytes_to_bignum(&ckrs[..ckrs.len()/2])?;
-    let mut bn_s = bytes_to_bignum(&ckrs[ckrs.len()/2..])?;
+    let mut bn_r = bytes_to_bignum(&ckrs[..ckrs.len() / 2])?;
+    let mut bn_s = bytes_to_bignum(&ckrs[ckrs.len() / 2..])?;
 
     let mut ec_sig = FfiBox::new(unsafe { ffi::ECDSA_SIG_new() })?;
 
-    let rv = unsafe {
-        ffi::ECDSA_SIG_set0(
-            ec_sig.as_mut_ptr(),
-            bn_r.as_mut_ptr(),
-            bn_s.as_mut_ptr(),
-        )
-    };
+    let rv =
+        unsafe { ffi::ECDSA_SIG_set0(ec_sig.as_mut_ptr(), bn_r.as_mut_ptr(), bn_s.as_mut_ptr()) };
     if rv != 1 {
         return Err(Error::GeneralError);
     }
@@ -304,7 +299,6 @@ fn ecdsa_sig_ckrs_to_der(ckrs: &[u8]) -> Result<Vec<u8>> {
     Ok(der_sig)
 }
 
-
 /// Convert a DER-encoded ECDSA signature to the Cryptoki [R,S] format, where either R
 /// or S is 0-padded, so that they are exactly the same length, and:
 /// R = sig[0 .. sig_len/2] and S = sig[sig_len/2 .. sig_len]
@@ -320,13 +314,7 @@ fn ecdsa_sig_der_to_ckrs(sig_der: &[u8]) -> Result<Vec<u8>> {
 
     let mut bn_r: *const ffi::BIGNUM = std::ptr::null();
     let mut bn_s: *const ffi::BIGNUM = std::ptr::null();
-    unsafe {
-        ffi::ECDSA_SIG_get0(
-            ec_sig.as_ptr(),
-            &mut bn_r,
-            &mut bn_s,
-        )
-    };
+    unsafe { ffi::ECDSA_SIG_get0(ec_sig.as_ptr(), &mut bn_r, &mut bn_s) };
     if bn_r.is_null() || bn_s.is_null() {
         return Err(Error::GeneralError);
     }
@@ -335,15 +323,17 @@ fn ecdsa_sig_der_to_ckrs(sig_der: &[u8]) -> Result<Vec<u8>> {
     let s_len = unsafe { ffi::BN_num_bytes(bn_s) } as usize;
     let order_len = if r_len >= s_len { r_len } else { s_len };
 
-    let mut ret = vec![0u8; 2*order_len];
-    let rv = unsafe {
-        ffi::BN_bn2bin_padded(ret.as_mut_ptr(), order_len as ffi::c_size_t, bn_r)
-    };
+    let mut ret = vec![0u8; 2 * order_len];
+    let rv = unsafe { ffi::BN_bn2bin_padded(ret.as_mut_ptr(), order_len as ffi::c_size_t, bn_r) };
     if rv != 1 {
         return Err(Error::GeneralError);
     }
     let rv = unsafe {
-        ffi::BN_bn2bin_padded(ret[order_len..].as_mut_ptr(), order_len as ffi::c_size_t, bn_s)
+        ffi::BN_bn2bin_padded(
+            ret[order_len..].as_mut_ptr(),
+            order_len as ffi::c_size_t,
+            bn_s,
+        )
     };
     if rv != 1 {
         return Err(Error::GeneralError);

@@ -173,9 +173,9 @@ pub extern "C" fn C_GetMechanismList(
         .token(slotID)
         .and_then(|tok| tok.mech_list().map_err(Error::TokenError))
         .and_then(|mechs| {
-            for i in 0..mechs.len() {
+            for (i, mk) in mechs.iter().enumerate() {
                 unsafe {
-                    std::ptr::write(pMechanismList.offset(i as isize), mechs[i].ck_type());
+                    std::ptr::write(pMechanismList.add(i), mk.ck_type());
                 }
             }
             Ok(pkcs11::CKR_OK)

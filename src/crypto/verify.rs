@@ -1,9 +1,9 @@
 use crate::backend::Mechanism;
 
 use super::ffi;
-use super::{config_evp_pkey_ctx, mech_type_to_evp_md, ecdsa_sig_ckrs_to_der};
-use super::{Error, FfiBox, OpCtxState, Pkey};
 use super::key::KeyAlgo;
+use super::{config_evp_pkey_ctx, ecdsa_sig_ckrs_to_der, mech_type_to_evp_md};
+use super::{Error, FfiBox, OpCtxState, Pkey};
 
 pub trait VerifyCtx: Send {
     fn update(&mut self, data: &[u8]) -> Result<(), Error>;
