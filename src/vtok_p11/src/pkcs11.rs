@@ -3,6 +3,11 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
+/// Generated from the following PKCS#11 v2.40 specification headers from Oasis
+/// pkcs11.h
+/// pkcs11t.h
+/// pkcs11f.h
+
 pub const _PKCS11_H_: u64 = 1;
 pub const _PKCS11T_H_: u64 = 1;
 pub const CRYPTOKI_VERSION_MAJOR: u8 = 2;

@@ -1,6 +1,8 @@
 #![allow(non_snake_case)]
 
-
+/// Utility macro for locking the vToken device
+/// It creates two variables in the calling scope, one holding the lock guard
+/// and the other a reference to the device.
 macro_rules! lock_device {
     ($guard:ident, $device:ident) => {
         let $guard = crate::data::DEVICE.lock().unwrap();
@@ -11,6 +13,9 @@ macro_rules! lock_device {
     };
 }
 
+/// Utility macro for locking the vToken device
+/// It creates two variables in the calling scope, one holding the lock guard
+/// and the other a mutable reference to the device.
 macro_rules! lock_device_mut {
     ($guard:ident, $device:ident) => {
         let mut $guard = crate::data::DEVICE.lock().unwrap();
@@ -21,6 +26,9 @@ macro_rules! lock_device_mut {
     };
 }
 
+/// Utility macro for locking a vToken session
+/// It creates two variables in the calling scope, one holding the lock guard
+/// and the other a reference to the session.
 macro_rules! lock_session {
     ($handle:expr, $session:ident, $sess_arc:ident) => {
         let $sess_arc;
@@ -36,6 +44,9 @@ macro_rules! lock_session {
     };
 }
 
+/// Utility macro for locking a vToken session
+/// It creates two variables in the calling scope, one holding the lock guard
+/// and the other a mutable reference to the session.
 macro_rules! lock_session_mut {
     ($handle:expr, $session:ident, $sess_arc:ident) => {
         let $sess_arc;
@@ -51,6 +62,8 @@ macro_rules! lock_session_mut {
     };
 }
 
+/// Utility macro implementing the PKCS#11 Section 5.2 on producing output
+/// for serveral API functions
 macro_rules! ck_out_buf_to_mut_slice {
     ($buf_ptr:ident, $buf_len_ptr:ident, $min_len:expr, $on_err:block) => {{
         if $buf_len_ptr.is_null() {
@@ -71,6 +84,8 @@ macro_rules! ck_out_buf_to_mut_slice {
     }};
 }
 
+/// Utility macro for passing raw foreign pointers to slices passed
+/// to the module backends
 macro_rules! ck_in_buf_to_slice {
     ($buf_ptr:ident, $buf_len_ptr:ident, $on_err:block) => {{
         if $buf_ptr.is_null() {
@@ -120,6 +135,7 @@ use crate::defs;
 use crate::pkcs11;
 use crate::util::logger::Logger;
 
+/// See PKCS#11 v2.40 Section 5.4 General-purpose functions
 #[no_mangle]
 pub extern "C" fn C_GetFunctionList(
     pp_fn_list: *mut *const pkcs11::CK_FUNCTION_LIST,

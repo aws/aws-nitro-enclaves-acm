@@ -34,6 +34,11 @@ pub enum SessionState {
     RoUser,
 }
 
+/// The active session states
+/// New sessions start with R/O Public state and once
+/// the user logins, the session shall enter R/O User Functions
+/// state. Logout will cause the state to transition back to
+/// the R/O Public state.
 impl SessionState {
     fn to_ck_state(&self) -> pkcs11::CK_STATE {
         match self {
@@ -43,6 +48,13 @@ impl SessionState {
     }
 }
 
+/// The session container. Holds the provisioned object database
+/// and also the operation context currently active (if any).
+/// The enumeration context is used only when user requests to
+/// find all objects attached. The other contexts are during actual
+/// session cryptopgrahic operations. Due to the nature of the Cryptoki
+/// PKCS#11 specification all operation contexts (digest, sign, verify,
+/// encrypt, decrypt) are mutually exclusive.
 pub struct Session {
     slot_id: pkcs11::CK_SLOT_ID,
     state: SessionState,
@@ -126,6 +138,7 @@ impl Session {
         self.enum_ctx.is_some()
     }
 
+    /// Finalize an active enumeration operation
     pub fn enum_finalize(&mut self) -> Result<()> {
         self.enum_ctx
             .take()
@@ -133,6 +146,7 @@ impl Session {
         Ok(())
     }
 
+    /// Initialize a digest context for a digest operation
     pub fn digest_init(&mut self, mech_type: pkcs11::CK_MECHANISM_TYPE) -> Result<()> {
         self.digest_ctx = Some(
             DigestCtx::new(mech_type).map_err(|_| Error::CkError(pkcs11::CKR_MECHANISM_INVALID))?,
@@ -144,6 +158,7 @@ impl Session {
         &mut self.digest_ctx
     }
 
+    /// Initialize a signing context for a signing operation
     pub fn sign_init(&mut self, mech: &Mechanism, key_handle: ObjectHandle) -> Result<()> {
         self.check_user_logged_in()?;
         let pkey = self.private_key_for_mech(mech, key_handle)?;
@@ -159,6 +174,7 @@ impl Session {
         &mut self.sign_ctx
     }
 
+    /// Initialize a verification context for a verification operation
     pub fn verify_init(&mut self, mech: &Mechanism, key_handle: ObjectHandle) -> Result<()> {
         self.check_user_logged_in()?;
         let pkey = self.public_key_for_mech(mech, key_handle)?;
@@ -174,6 +190,7 @@ impl Session {
         &mut self.verify_ctx
     }
 
+    /// Initialize an encryption context for an encryption operation
     pub fn encrypt_init(&mut self, mech: &Mechanism, key_handle: ObjectHandle) -> Result<()> {
         self.check_user_logged_in()?;
         let pkey = self.public_key_for_mech(mech, key_handle)?;
@@ -189,6 +206,7 @@ impl Session {
         &mut self.encrypt_ctx
     }
 
+    /// Initialize an decryption context for a decryption operation
     pub fn decrypt_init(&mut self, mech: &Mechanism, key_handle: ObjectHandle) -> Result<()> {
         self.check_user_logged_in()?;
         let pkey = self.private_key_for_mech(mech, key_handle)?;
@@ -204,6 +222,8 @@ impl Session {
         &mut self.decrypt_ctx
     }
 
+    /// Helper for checking if the user has been logged in. Some cryptograhic
+    /// operations (i.e. signing with private keys) require login.
     fn check_user_logged_in(&self) -> Result<()> {
         match self.state {
             SessionState::RoUser => Ok(()),
@@ -211,6 +231,8 @@ impl Session {
         }
     }
 
+    /// Constructs an EVP_PKEY wrapper object from a p11 object based on an input
+    /// PEM formatted string while also keeping consistency with the requested mechanism.
     fn private_key_for_mech(
         &self,
         mech: &Mechanism,
@@ -236,6 +258,7 @@ impl Session {
         }
     }
 
+    /// Constructs an internal public key object type from the provisioned PEM file
     fn public_key_for_mech(
         &self,
         mech: &Mechanism,

@@ -4,6 +4,8 @@ use crate::pkcs11;
 use crate::util::ckraw::CkRawMechanism;
 use crate::Error;
 
+/// See PKCS#11 v2.40 5.11 Signing and MACing functions
+
 pub extern "C" fn C_VerifyInit(
     hSession: pkcs11::CK_SESSION_HANDLE,
     pMechanism: pkcs11::CK_MECHANISM_PTR,

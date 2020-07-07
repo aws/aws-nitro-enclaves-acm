@@ -1,5 +1,7 @@
 use crate::pkcs11;
 
+/// See PKCS#11 v2.40 Section 5.6 Session management functions
+
 pub extern "C" fn C_OpenSession(
     slotID: pkcs11::CK_SLOT_ID,
     flags: pkcs11::CK_FLAGS,

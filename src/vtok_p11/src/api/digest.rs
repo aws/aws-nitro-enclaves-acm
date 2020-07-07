@@ -3,6 +3,8 @@ use crate::crypto::OpCtxState;
 use crate::pkcs11;
 use crate::Error;
 
+/// See PKCS#11 v2.40 Section 5.10 Message digesting functions
+
 pub extern "C" fn C_DigestInit(
     hSession: pkcs11::CK_SESSION_HANDLE,
     pMechanism: *mut pkcs11::CK_MECHANISM,

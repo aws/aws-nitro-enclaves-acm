@@ -6,6 +6,9 @@ use super::Error;
 use super::FfiBox;
 use super::OpCtxState;
 
+/// Message digest context logic interfacing the cryptographic backend library
+/// Each session can have one active message digest context at a time
+
 pub struct DigestCtx {
     state: OpCtxState,
     digest_len: usize,

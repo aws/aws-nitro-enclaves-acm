@@ -12,6 +12,7 @@ mod pkcs11;
 use crate::crypto::Error as CryptoError;
 use backend::token::Error as TokenError;
 
+/// Device, slot and token capabilities and information
 mod defs {
     use super::backend::mech::{MechDigest, Mechanism};
     use super::pkcs11;
@@ -70,7 +71,7 @@ mod defs {
     ];
 }
 
-// Helper for comparing Criptoki versions
+/// Helper for comparing Criptoki versions
 impl PartialEq for pkcs11::CK_VERSION {
     fn eq(&self, other: &Self) -> bool {
         self.major == other.major && self.minor == other.minor
@@ -87,6 +88,8 @@ mod data {
     use super::defs;
     use super::pkcs11::*;
 
+    /// Supported Criptoki PKCS#11 functions. As per specification,
+    /// all functions are exported but some return CKR_FUNCTION_NOT_SUPPORTED.
     pub static FN_LIST: CK_FUNCTION_LIST = CK_FUNCTION_LIST {
         version: defs::DEVICE_VERSION,
         C_Initialize: Some(api::C_Initialize),

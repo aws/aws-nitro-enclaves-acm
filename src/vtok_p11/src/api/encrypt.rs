@@ -5,6 +5,8 @@ use crate::pkcs11;
 use crate::util::ckraw::CkRawMechanism;
 use crate::Error;
 
+/// See PKCS#11 v2.40 Section 5.8 Encryption functions
+
 pub extern "C" fn C_EncryptInit(
     hSession: pkcs11::CK_SESSION_HANDLE,
     pMechanism: pkcs11::CK_MECHANISM_PTR,

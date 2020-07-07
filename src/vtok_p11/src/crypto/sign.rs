@@ -5,6 +5,9 @@ use super::key::KeyAlgo;
 use super::{config_evp_pkey_ctx, ecdsa_sig_der_to_ckrs, mech_type_to_evp_md};
 use super::{Error, FfiBox, OpCtxState, Pkey};
 
+/// Signing context logic interfacing the cryptographic backend library
+/// Each session can have one active signing context at a time
+
 pub trait SignCtx: Send {
     fn update(&mut self, data: &[u8]) -> Result<(), Error>;
     fn finalize(self: Box<Self>) -> Result<Vec<u8>, Error>;

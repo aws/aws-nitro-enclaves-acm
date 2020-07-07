@@ -9,9 +9,15 @@ pub enum KeyAlgo {
     Rsa,
 }
 
+/// Logic for managing cryptographic keys.
+/// These keys are constructed from decrypted PEM files provided during
+/// provisioning. The Pkey is a wrapper over the generic EVP_PKEY
+/// presented in the backend cryptographic library.
+/// We currently support RSA and ECDSA key types of various sizes.
 pub struct Pkey(FfiBox<ffi::EVP_PKEY>);
 
 impl Pkey {
+    /// Construct a private key from a private key PEM file
     pub fn from_private_pem(pem: &str) -> Result<Self> {
         let mut bio = FfiBox::new(unsafe {
             ffi::BIO_new_mem_buf(
@@ -32,6 +38,7 @@ impl Pkey {
         Ok(Self(pkey))
     }
 
+    /// Get the key type of this key object
     pub fn algo(&self) -> Result<KeyAlgo> {
         match unsafe { ffi::EVP_PKEY_id(self.0.as_ptr()) } {
             ffi::EVP_PKEY_RSA => Ok(KeyAlgo::Rsa),
@@ -40,6 +47,8 @@ impl Pkey {
         }
     }
 
+    /// Get the key size of this key object in bits. Caller should
+    /// compute this value based on context and key type
     pub fn num_bits(&self) -> Result<usize> {
         let rv = unsafe { ffi::EVP_PKEY_bits(self.as_ptr()) };
         if rv <= 0 {
@@ -73,6 +82,7 @@ impl Pkey {
         }
     }
 
+    /// Get the key modulus (applicable if the object wraps an RSA key)
     pub fn rsa_modulus(&self) -> Result<Vec<u8>> {
         let rsa = self.rsa_key()?;
         let mut bn_ptr: *const ffi::BIGNUM = std::ptr::null();
@@ -91,6 +101,7 @@ impl Pkey {
         bignum_to_vec(bn_ptr)
     }
 
+    /// Get the key public exponent (applicable if the object wraps an RSA key)
     pub fn rsa_public_exponent(&self) -> Result<Vec<u8>> {
         let rsa = self.rsa_key()?;
         let mut bn_ptr: *const ffi::BIGNUM = std::ptr::null();
@@ -109,6 +120,8 @@ impl Pkey {
         bignum_to_vec(bn_ptr)
     }
 
+    /// Get the DER-encoding of the DER-encoding of ANSI X9.62 ECPoint value Q
+    /// (applicable if the object wraps an EC key)
     pub fn ec_point_q_x962(&self) -> Result<Vec<u8>> {
         let ec = self.ec_key()?;
         let mut ctx = FfiBox::new(unsafe { ffi::BN_CTX_new() })?;
@@ -128,6 +141,8 @@ impl Pkey {
         Err(Error::GeneralError)
     }
 
+    /// Get the DER-encoding of the DER-encoding of an ANSI X9.62 parameters value
+    /// (applicable if the object wraps an EC key)
     pub fn ec_params_x962(&self) -> Result<Vec<u8>> {
         let ec = self.ec_key()?;
         let group = unsafe { ffi::EC_KEY_get0_group(ec) };
@@ -160,6 +175,8 @@ impl Pkey {
         self.0.into_raw()
     }
 
+    /// Get a reference to the wrapped EC key. Ownership is not taken.
+    /// (applicable if the object wraps an EC key)
     fn ec_key(&self) -> Result<*const ffi::EC_KEY> {
         let ec = unsafe { ffi::EVP_PKEY_get0_EC_KEY(self.as_ptr()) };
         if ec.is_null() {
@@ -168,6 +185,8 @@ impl Pkey {
         Ok(ec)
     }
 
+    /// Get a reference to the wrapped RSA key. Ownership is not taken.
+    /// (applicable if the object wraps an RSA key)
     fn rsa_key(&self) -> Result<*const ffi::RSA> {
         let rsa = unsafe { ffi::EVP_PKEY_get0_RSA(self.as_ptr()) };
         if rsa.is_null() {

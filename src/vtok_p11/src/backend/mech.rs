@@ -25,6 +25,12 @@ pub enum Mechanism {
     Ecdsa(Option<MechDigest>),
 }
 
+/// The token supported mechanisms and their capabilities.
+/// See PKCS#11 Mechanisms Specification Version 2.40 for details on how these
+/// mechanisms should behave.
+///
+/// Mechanisms are split into single-part (i.e. sign()) and/or multi-part
+/// operations (i.e. sign_update() + sign_final()) depending on type and capabilities.
 impl Mechanism {
     const RSA_MIN_KEY_BITS: pkcs11::CK_ULONG = 1024;
     const RSA_MAX_KEY_BITS: pkcs11::CK_ULONG = 8192;

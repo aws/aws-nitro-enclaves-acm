@@ -6,6 +6,10 @@ use crate::defs;
 use crate::pkcs11;
 use crate::{Error, Result};
 
+/// The root device container. Holds a known number of device slots.
+/// A successful provisioning operation will attach a token to the respective
+/// slot. Newly created sessions are attached to their respective slots and
+/// the user authenticates against the token PIN from those slots respectively.
 pub struct Device {
     slots: Vec<Slot>,
     session_slot_map: HashMap<pkcs11::CK_SESSION_HANDLE, pkcs11::CK_SLOT_ID>,
