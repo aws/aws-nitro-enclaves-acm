@@ -2,6 +2,8 @@ use crate::pkcs11;
 use crate::util::CkRawAttrTemplate;
 use std::ptr;
 
+/// See PKCS#11 v2.40 Section 5.7 Object management functions
+
 pub extern "C" fn C_FindObjectsInit(
     hSession: pkcs11::CK_SESSION_HANDLE,
     pTemplate: pkcs11::CK_ATTRIBUTE_PTR,

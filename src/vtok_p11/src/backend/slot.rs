@@ -2,6 +2,9 @@ use super::token::Token;
 use crate::defs;
 use crate::pkcs11;
 
+/// Device slot container. A token shall be attached to it
+/// (i.e. CKF_TOKEN_PRESENT bit set) once it is successfully
+/// provisioned with a database.
 pub struct Slot {
     _id: pkcs11::CK_SLOT_ID,
     token: Option<Token>,

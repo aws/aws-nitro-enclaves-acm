@@ -23,6 +23,12 @@ pub enum Error {
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Slot token container. Contains all active sessions created against
+/// the parent slot of this token. The database is attached to the token
+/// and each session receives a copy of the provisioned database for
+/// working with the database objects. The user must login successfuly
+/// in order to actually do cryptographic operations in the context of
+/// that respective session.
 pub struct Token {
     slot_id: pkcs11::CK_SLOT_ID,
     sessions: HashMap<pkcs11::CK_SESSION_HANDLE, Arc<Mutex<Session>>>,

@@ -5,6 +5,9 @@ use super::key::KeyAlgo;
 use super::{config_evp_pkey_ctx, ecdsa_sig_ckrs_to_der, mech_type_to_evp_md};
 use super::{Error, FfiBox, OpCtxState, Pkey};
 
+/// Verifying context logic interfacing the cryptographic backend library
+/// Each session can have one active verifying context at a time
+
 pub trait VerifyCtx: Send {
     fn update(&mut self, data: &[u8]) -> Result<(), Error>;
     fn finalize(self: Box<Self>, signature: &[u8]) -> Result<(), Error>;

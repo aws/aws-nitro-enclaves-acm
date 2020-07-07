@@ -8,6 +8,13 @@ use crate::{Error, Result};
 
 use super::{EcKeyInfo, RsaKeyInfo};
 
+/// Object and object attribute handling logic. See the PKCS#11
+/// Section 4 on objects for more details on how these attributes
+/// are handled. Each object has a unique handle and
+/// a well defined class (i.e. private key, certificate etc.) and
+/// based on this class a well defined set of valid attributes.
+/// Since there is no R/W session support these objects are created
+/// from the user provisioned database.
 #[derive(Clone, Copy, Debug, Hash)]
 pub struct ObjectHandle(u64);
 

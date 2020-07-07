@@ -5,6 +5,9 @@
 
 use crate::pkcs11;
 
+/// Not-Yet-Implemented Cryptoki functions
+/// See PKCS#11 v2.40 for information on these functions
+
 pub extern "C" fn C_InitPIN(
     hSession: pkcs11::CK_SESSION_HANDLE,
     uPin: pkcs11::CK_UTF8CHAR_PTR,

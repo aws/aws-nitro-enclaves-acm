@@ -17,6 +17,9 @@ pub use verify::{DigestVerifyCtx, DirectVerifyCtx, VerifyCtx};
 
 use crate::backend::Mechanism;
 
+/// Utility RAII wrappers for managing the cryptographic library interface
+/// logic and also objects allocated through the backend cryptographic library
+
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
     BadFlow,
@@ -193,6 +196,9 @@ where
     }
 }
 
+/// Operation Context state. An operation context state is stored
+/// in order to avoid misbehaving applications calling the incorrect
+/// cryptographic intercaces (i.e. C_SignInit() -> C_Sign() -> C_SignUpdate())
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OpCtxState {
     Initialized,
@@ -201,6 +207,7 @@ pub enum OpCtxState {
     MultipartReady,
 }
 
+/// Convert a byte slice to a BIGNUM
 fn bytes_to_bignum(src: &[u8]) -> Result<FfiBox<ffi::BIGNUM>> {
     FfiBox::new(unsafe {
         ffi::BN_bin2bn(
@@ -211,6 +218,7 @@ fn bytes_to_bignum(src: &[u8]) -> Result<FfiBox<ffi::BIGNUM>> {
     })
 }
 
+/// Convert an BIGNUM to a byte vector
 fn bignum_to_vec(bn: *const ffi::BIGNUM) -> Result<Vec<u8>> {
     if bn.is_null() {
         return Err(Error::GeneralError);
@@ -228,6 +236,7 @@ fn bignum_to_vec(bn: *const ffi::BIGNUM) -> Result<Vec<u8>> {
     Ok(ret)
 }
 
+/// Convert an PKCS#11 message digest type to an EVP MD type
 fn mech_type_to_evp_md(mech_type: pkcs11::CK_MECHANISM_TYPE) -> Result<*const ffi::EVP_MD> {
     match mech_type {
         pkcs11::CKM_SHA_1
@@ -254,6 +263,7 @@ fn mech_type_to_evp_md(mech_type: pkcs11::CK_MECHANISM_TYPE) -> Result<*const ff
     }
 }
 
+/// Convert an PKCS#11 MGF type to an EVP MD type
 fn mgf_to_evp_md(mgf: pkcs11::CK_RSA_PKCS_MGF_TYPE) -> Result<*const ffi::EVP_MD> {
     match mgf {
         pkcs11::CKG_MGF1_SHA1 => Ok(unsafe { ffi::EVP_sha1() }),
@@ -342,6 +352,9 @@ fn ecdsa_sig_der_to_ckrs(sig_der: &[u8]) -> Result<Vec<u8>> {
     Ok(ret)
 }
 
+/// Configure the current EVP PKEY prior to a signing or a verification operation.
+/// Depending on the RSA mechanism used, padding might differ.
+/// ECDSA does not require any special handling
 fn config_evp_pkey_ctx(pctx: *mut ffi::EVP_PKEY_CTX, mech: &Mechanism) -> Result<()> {
     let padding = match mech {
         Mechanism::Digest(_) => return Err(Error::BadMech),

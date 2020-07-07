@@ -4,6 +4,9 @@ use super::config_evp_pkey_ctx;
 use super::ffi;
 use super::{Error, FfiBox, OpCtxState, Pkey};
 
+/// Encryption context logic interfacing the cryptographic backend library
+/// Each session can have one active encryption context at a time
+
 pub trait EncryptCtx: Send {
     fn update(&mut self, data: &[u8]) -> Result<(), Error>;
     fn finalize(self: Box<Self>) -> Result<Vec<u8>, Error>;

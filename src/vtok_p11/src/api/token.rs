@@ -1,6 +1,8 @@
 use crate::pkcs11;
 use crate::Error;
 
+/// See PKCS#11 v2.40 Section 5.5 Slot and token management functions
+
 pub extern "C" fn C_GetSlotList(
     tokenPresent: pkcs11::CK_BBOOL,
     pSlotList: pkcs11::CK_SLOT_ID_PTR,

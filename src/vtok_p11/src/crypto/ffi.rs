@@ -4,17 +4,24 @@
 use std::os::raw::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_void};
 pub type c_size_t = c_ulong;
 
+/// The low level backend cryptographic interface used by this module.
+/// Built on top of the backend cryptographic library (i.e. BoringSSL,
+/// OpenSSL, AWS Crypto). See the library documentation for each entries
+/// found here, depending on which one is linked at run-time.
+
+/// Maximum message digest size
 pub const EVP_MAX_MD_SIZE: usize = 64;
 
-// RSA padding types
+/// RSA padding types
 pub const RSA_PKCS1_PADDING: c_int = 1;
 pub const RSA_NO_PADDING: c_int = 3;
 pub const RSA_PKCS1_PSS_PADDING: c_int = 6;
 
-// EVP_PKEY types
+/// EVP_PKEY types
 pub const EVP_PKEY_RSA: c_int = 6;
 pub const EVP_PKEY_EC: c_int = 408;
 
+/// Opaque cryptographic objects
 #[repr(C)]
 pub struct BIGNUM {
     _ph: [u8; 0],
@@ -67,6 +74,8 @@ pub struct BN_CTX {
 pub struct ECDSA_SIG {
     _ph: [u8; 0],
 }
+
+/// Transparent cryptographic objects
 #[repr(C)]
 pub struct cbb_buffer_st {
     buf: *mut u8,
@@ -103,7 +112,9 @@ impl Drop for CBB {
     }
 }
 
+/// Imported cryptographic APIs
 extern "C" {
+    /// Private key utility functions (i.e. from PEM)
     pub fn BIO_new_mem_buf(buf: *const c_void, len: c_int) -> *mut BIO;
 
     pub fn BIO_free(bio: *mut BIO) -> c_int;
@@ -115,7 +126,7 @@ extern "C" {
         u: *mut c_void,
     ) -> *mut EVP_PKEY;
 
-    // Message digest constants
+    /// Message digest constants
     pub fn EVP_sha1() -> *const EVP_MD;
     pub fn EVP_sha224() -> *const EVP_MD;
     pub fn EVP_sha256() -> *const EVP_MD;
@@ -126,7 +137,7 @@ extern "C" {
     pub fn EVP_MD_CTX_new() -> *mut EVP_MD_CTX;
     pub fn EVP_MD_CTX_free(ctx: *mut EVP_MD_CTX);
 
-    // Digest
+    /// Message Digest functions
     pub fn EVP_DigestInit_ex(
         ctx: *mut EVP_MD_CTX,
         type_: *const EVP_MD,
@@ -143,7 +154,7 @@ extern "C" {
         impl_: *mut ENGINE,
     ) -> c_int;
 
-    // Sign
+    /// Sign functions
     pub fn EVP_PKEY_sign_init(ctx: *mut EVP_PKEY_CTX) -> c_int;
     pub fn EVP_PKEY_sign(
         ctx: *mut EVP_PKEY_CTX,
@@ -173,7 +184,7 @@ extern "C" {
         data_len: c_size_t,
     ) -> c_int;
 
-    // Verify
+    /// Verify functions
     pub fn EVP_PKEY_verify_init(ctx: *mut EVP_PKEY_CTX) -> c_int;
     pub fn EVP_PKEY_verify(
         ctx: *mut EVP_PKEY_CTX,
@@ -207,7 +218,7 @@ extern "C" {
         len: c_size_t,
     ) -> c_int;
 
-    // Decrypt
+    /// Decryption functions
     pub fn EVP_PKEY_decrypt_init(ctx: *mut EVP_PKEY_CTX) -> c_int;
     pub fn EVP_PKEY_decrypt(
         ctx: *mut EVP_PKEY_CTX,
@@ -217,7 +228,7 @@ extern "C" {
         in_len: c_size_t,
     ) -> c_int;
 
-    // Encrypt
+    /// Encryption functions
     pub fn EVP_PKEY_encrypt_init(ctx: *mut EVP_PKEY_CTX) -> c_int;
     pub fn EVP_PKEY_encrypt(
         ctx: *mut EVP_PKEY_CTX,
@@ -227,18 +238,19 @@ extern "C" {
         in_len: c_size_t,
     ) -> c_int;
 
-    // EVP PKEY
+    /// Generic EVP PKEY container functions
     pub fn EVP_PKEY_free(key: *mut EVP_PKEY);
     pub fn EVP_PKEY_bits(key: *const EVP_PKEY) -> c_int;
     pub fn EVP_PKEY_size(key: *const EVP_PKEY) -> c_int;
     pub fn EVP_PKEY_id(key: *const EVP_PKEY) -> c_int;
 
+    /// Generic EVP PKEY context functions
     pub fn EVP_PKEY_CTX_new(pkey: *mut EVP_PKEY, e: *const c_void) -> *mut EVP_PKEY_CTX;
     pub fn EVP_PKEY_CTX_free(ctx: *mut EVP_PKEY_CTX);
     pub fn EVP_PKEY_CTX_get0_pkey(ctx: *const EVP_PKEY_CTX) -> *const EVP_PKEY;
     pub fn EVP_PKEY_CTX_set_signature_md(ctx: *mut EVP_PKEY_CTX, md: *const EVP_MD) -> c_int;
 
-    // RSA Specific
+    /// RSA key specific functions
     pub fn EVP_PKEY_get0_RSA(pkey: *const EVP_PKEY) -> *const RSA;
     // Note: OpenSSL doesn't export these, implementing them as a macros instead.
     pub fn EVP_PKEY_CTX_set_rsa_padding(ctx: *mut EVP_PKEY_CTX, pad: c_int) -> c_int;
@@ -252,7 +264,7 @@ extern "C" {
     );
     pub fn RSA_free(rsa: *mut RSA);
 
-    // EC specific
+    /// EC key specific functions
     pub fn EVP_PKEY_get0_EC_KEY(pkey: *const EVP_PKEY) -> *mut EC_KEY;
     pub fn EC_KEY_key2buf(
         ec: *const EC_KEY,
@@ -269,7 +281,6 @@ extern "C" {
         out_r: *mut *const BIGNUM,
         our_s: *mut *const BIGNUM,
     );
-    // OpenSSL compatibility
     pub fn d2i_ECDSA_SIG(
         sig: *mut *mut ECDSA_SIG,
         pp: *mut *const c_uchar,
@@ -284,13 +295,13 @@ extern "C" {
     pub fn EC_POINT_free(point: *mut EC_POINT);
     pub fn EC_GROUP_free(group: *mut EC_GROUP);
 
-    // CBB
+    /// CBB helper functions
     pub fn CBB_init(cbb: *mut CBB, initial_capacity: c_size_t) -> c_int;
     pub fn CBB_cleanup(cbb: *mut CBB);
     pub fn CBB_data(cbb: *const CBB) -> *const u8;
     pub fn CBB_len(cbb: *const CBB) -> c_size_t;
 
-    // BN
+    /// BIGNUM helper functions
     pub fn BN_num_bytes(bn: *const BIGNUM) -> c_uint;
     pub fn BN_bn2bin(bn: *const BIGNUM, to: *mut c_char) -> c_int;
     pub fn BN_bn2bin_padded(out: *mut u8, len: c_size_t, in_: *const BIGNUM) -> c_int;
