@@ -1,6 +1,7 @@
 #!/bin/sh
 
-# Development enclave container init script
+# Development enclave container init script over AF_UNIX transport
+
 CTR_SRC_DIR="/vtok"
 CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_TARGET_DIR="$CTR_BUILD_DIR/target/debug"
