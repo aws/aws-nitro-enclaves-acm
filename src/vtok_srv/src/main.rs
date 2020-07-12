@@ -2,11 +2,19 @@ extern crate vtok_rpc;
 
 use std::fmt;
 use std::io::Read;
-use vtok_rpc::{Listener, ProvisionProto};
+use std::os::unix::net::UnixListener;
+use vtok_rpc::{Listener, VsockAddr, VsockListener};
+
+const USAGE: &str = r#"Nitro vToken database provisioning server
+    Usage:
+        vtoken-srv vsock <cid> <port>
+        vtoken-srv unix <path>
+"#;
 
 enum Error {
     ProtoError(vtok_rpc::ProtoError),
     IoError(std::io::Error),
+    UsageError,
 }
 
 impl From<Error> for i32 {
@@ -23,32 +31,12 @@ impl fmt::Display for Error {
         match self {
             Self::ProtoError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
+            Self::UsageError => write!(f, "{}", USAGE),
         }
     }
 }
 
-fn print_usage() {
-    let usage = r#"Nitro vToken database provisioning server
-Usage:
-    vtoken-srv vsock <cid> <port>
-    vtoken-srv unix <path>"#;
-    println!("{}", usage);
-}
-
-/// Parameters:
-/// AF_VSOCK: <vtoken-srv> "vsock" "10000"
-/// AF_UNIX:  <vtoken-srv> "unix" "some_path"
-fn main_main() -> Result<(), Error> {
-    let args: Vec<String> = std::env::args().collect();
-
-    if args.len() < 2 {
-        print_usage();
-        return Ok(());
-    }
-
-    let proto = ProvisionProto::from_args(&args[1..]).map_err(Error::ProtoError)?;
-    let listener = Listener::new(&proto).map_err(Error::ProtoError)?;
-
+fn run_server<L: Listener>(listener: L) -> Result<(), Error> {
     println!("[vToken] Provisioning server is now running");
     loop {
         let mut stream = listener.accept().map_err(Error::ProtoError)?;
@@ -64,8 +52,38 @@ fn main_main() -> Result<(), Error> {
     }
 }
 
+/// Parameters:
+/// AF_VSOCK: <vtoken-srv> "vsock" "10000"
+/// AF_UNIX:  <vtoken-srv> "unix" "some_path"
+fn rusty_main() -> Result<(), Error> {
+    let mut args = std::env::args();
+
+    args.next();
+
+    match (
+        args.next().as_ref().map(|s| s.as_str()),
+        args.next().as_ref().map(|s| s.as_str()),
+    ) {
+        (Some("vsock"), Some(port)) => {
+            let port = port
+                .parse::<std::os::raw::c_uint>()
+                .map_err(|_| Error::UsageError)?;
+            VsockListener::bind(VsockAddr::any_cid_with_port(port), 5)
+                .map_err(Error::ProtoError)
+                .and_then(|l| run_server(l))?;
+        }
+        (Some("unix"), Some(path)) => {
+            UnixListener::bind(path)
+                .map_err(Error::IoError)
+                .and_then(|l| run_server(l))?;
+        }
+        (_, _) => return Err(Error::UsageError),
+    };
+    Ok(())
+}
+
 fn main() {
-    match main_main() {
+    match rusty_main() {
         Ok(()) => std::process::exit(0),
         Err(e) => {
             eprintln!("{}", e);

@@ -1,12 +1,20 @@
 extern crate vtok_rpc;
 
 use std::fmt;
+use std::os::unix::net::UnixStream;
 use std::io::Write;
-use vtok_rpc::{ProvisionProto, Stream};
+use vtok_rpc::{VsockAddr, VsockStream};
+
+const USAGE: &str = r#"Nitro vToken Tool
+    Usage:
+        nitro-vtoken vsock <cid> <port>
+        nitro-vtoken unix <path>
+"#;
 
 enum Error {
     ProtoError(vtok_rpc::ProtoError),
     IoError(std::io::Error),
+    UsageError,
 }
 
 impl From<Error> for i32 {
@@ -23,37 +31,46 @@ impl fmt::Display for Error {
         match self {
             Self::ProtoError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
+            Self::UsageError => write!(f, "{}", USAGE),
         }
     }
-}
-
-fn print_usage() {
-    let usage = r#"Nitro vToken Tool
-Usage:
-    nitro-vtoken vsock <cid> <port>
-    nitro-vtoken unix <path>"#;
-    println!("{}", usage);
 }
 
 /// Parameters:
 /// AF_VSOCK: <nitro-vtoken> "vsock" "16" "10000"
 /// AF_UNIX:  <nitro-vtoken> "unix" "some/path"
-fn main_main() -> Result<(), Error> {
-    let args: Vec<String> = std::env::args().collect();
+fn rusty_main() -> Result<(), Error> {
+    let mut args = std::env::args();
 
-    if args.len() < 2 {
-        print_usage();
-        return Ok(());
-    }
+    args.next();
+
+    let test_data = "Testing the client".as_bytes();
+
+    match (
+        args.next().as_ref().map(|s| s.as_str()),
+        args.next().as_ref().map(|s| s.as_str()),
+        args.next().as_ref().map(|s| s.as_str()),
+    ) {
+        (Some("vsock"), Some(cid), Some(port)) => {
+            let cid = cid
+                .parse::<std::os::raw::c_uint>()
+                .map_err(|_| Error::UsageError)?;
+            let port = port
+                .parse::<std::os::raw::c_uint>()
+                .map_err(|_| Error::UsageError)?;
+            VsockStream::connect(VsockAddr {cid, port})
+                .map_err(Error::ProtoError)
+                .and_then(|mut s| s.write_all(&test_data).map_err(Error::IoError))?;
+        }
+        (Some("unix"), Some(path), None) => {
+            UnixStream::connect(path)
+                .map_err(Error::IoError)
+                .and_then(|mut s| s.write_all(&test_data).map_err(Error::IoError))?;
+        }
+        _ => return Err(Error::UsageError),
+    };
 
     // TODO: Lots of logic to add
-    //
-    // Spawn a client and send some bytes
-    let proto = ProvisionProto::from_args(&args[1..]).map_err(Error::ProtoError)?;
-    let mut stream = Stream::new(&proto).map_err(Error::ProtoError)?;
-
-    let data = "Testing the client".as_bytes();
-    stream.write_all(&data).map_err(Error::IoError)?;
 
     println!("Done");
 
@@ -61,7 +78,7 @@ fn main_main() -> Result<(), Error> {
 }
 
 fn main() {
-    match main_main() {
+    match rusty_main() {
         Ok(()) => std::process::exit(0),
         Err(e) => {
             eprintln!("{}", e);
