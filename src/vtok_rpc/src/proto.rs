@@ -19,19 +19,28 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Generic listener trait, that can `accept()` connected streams of the associated type
+/// `Self::Stream`.
 pub trait Listener {
+    /// The connected stream type, implementing `Read + Write`.
     type Stream: Read + Write;
 
+    /// Accept a new connected stream.
     fn accept(&self) -> Result<Self::Stream>;
 }
 
+/// A vsock address spec.
 #[derive(Clone, Copy, Debug)]
 pub struct VsockAddr {
+    /// vsock CID.
     pub cid: c_uint,
+    /// vsock port.
     pub port: c_uint,
 }
 
 impl VsockAddr {
+    /// Create a VsockAddr with the special VMADDR_CID_ANY CID and the provided port.
+    /// This can be used to bind to the local vsock device for listening.
     pub fn any_cid_with_port(port: c_uint) -> Self {
         Self {
             cid: libc::VMADDR_CID_ANY,
@@ -47,6 +56,7 @@ pub struct VsockStream {
 }
 
 impl VsockStream {
+    /// Create and return a VsockStream connected to `addr`.
     pub fn connect(addr: VsockAddr) -> Result<Self> {
         let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM, 0) };
         if fd < 0 {
@@ -131,6 +141,8 @@ pub struct VsockListener {
 }
 
 impl VsockListener {
+    /// Create and return a VsockListener that is bound to `addr` and ready to accept
+    /// client connections.
     pub fn bind(addr: VsockAddr, backlog: std::os::raw::c_int) -> Result<Self> {
         let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM, 0) };
         if fd < 0 {

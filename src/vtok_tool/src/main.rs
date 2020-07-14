@@ -1,8 +1,10 @@
 extern crate vtok_rpc;
 
 use std::fmt;
+use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
-use std::io::Write;
+use vtok_rpc::ApiRequest;
+use vtok_rpc::{HttpTransport, Transport};
 use vtok_rpc::{VsockAddr, VsockStream};
 
 const USAGE: &str = r#"Nitro vToken Tool
@@ -14,6 +16,7 @@ const USAGE: &str = r#"Nitro vToken Tool
 enum Error {
     ProtoError(vtok_rpc::ProtoError),
     IoError(std::io::Error),
+    TransportError(vtok_rpc::transport::Error),
     UsageError,
 }
 
@@ -32,8 +35,21 @@ impl fmt::Display for Error {
             Self::ProtoError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
+            Self::TransportError(e) => write!(f, "{:?}", e),
         }
     }
+}
+
+fn run_client<S: Read + Write>(stream: S) -> Result<(), Error> {
+    let mut xport = HttpTransport::new(stream, "/rpc/v1");
+    xport
+        .send_request(ApiRequest::Hello {
+            sender: "TestClient".to_string(),
+        })
+        .map_err(Error::TransportError)?;
+    let resp = xport.recv_response().map_err(Error::TransportError)?;
+    println!("Test client got reponse: {:?}", resp);
+    Ok(())
 }
 
 /// Parameters:
@@ -43,8 +59,6 @@ fn rusty_main() -> Result<(), Error> {
     let mut args = std::env::args();
 
     args.next();
-
-    let test_data = "Testing the client".as_bytes();
 
     match (
         args.next().as_ref().map(|s| s.as_str()),
@@ -58,17 +72,17 @@ fn rusty_main() -> Result<(), Error> {
             let port = port
                 .parse::<std::os::raw::c_uint>()
                 .map_err(|_| Error::UsageError)?;
-            VsockStream::connect(VsockAddr {cid, port})
+            VsockStream::connect(VsockAddr { cid, port })
                 .map_err(Error::ProtoError)
-                .and_then(|mut s| s.write_all(&test_data).map_err(Error::IoError))?;
+                .and_then(|s| run_client(s))?;
         }
         (Some("unix"), Some(path), None) => {
             UnixStream::connect(path)
                 .map_err(Error::IoError)
-                .and_then(|mut s| s.write_all(&test_data).map_err(Error::IoError))?;
+                .and_then(|s| run_client(s))?;
         }
         _ => return Err(Error::UsageError),
-    };
+    }
 
     // TODO: Lots of logic to add
 

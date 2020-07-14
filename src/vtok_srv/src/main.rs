@@ -1,13 +1,14 @@
 extern crate vtok_rpc;
 
 use std::fmt;
-use std::io::Read;
 use std::os::unix::net::UnixListener;
+use vtok_rpc::{ApiRequest, ApiResponse};
+use vtok_rpc::{HttpTransport, Transport};
 use vtok_rpc::{Listener, VsockAddr, VsockListener};
 
 const USAGE: &str = r#"Nitro vToken database provisioning server
     Usage:
-        vtoken-srv vsock <cid> <port>
+        vtoken-srv vsock <port>
         vtoken-srv unix <path>
 "#;
 
@@ -15,6 +16,7 @@ enum Error {
     ProtoError(vtok_rpc::ProtoError),
     IoError(std::io::Error),
     UsageError,
+    TransportError(vtok_rpc::transport::Error),
 }
 
 impl From<Error> for i32 {
@@ -32,6 +34,7 @@ impl fmt::Display for Error {
             Self::ProtoError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
+            Self::TransportError(e) => write!(f, "{:?}", e),
         }
     }
 }
@@ -39,16 +42,17 @@ impl fmt::Display for Error {
 fn run_server<L: Listener>(listener: L) -> Result<(), Error> {
     println!("[vToken] Provisioning server is now running");
     loop {
-        let mut stream = listener.accept().map_err(Error::ProtoError)?;
+        let stream = listener.accept().map_err(Error::ProtoError)?;
 
         // TODO: Add vtok_rpc logic
-        // We use read_exact() since we will receive protocol
-        // information on the size of the received blob
-        let mut data = vec![0u8; 18];
 
-        stream.read_exact(&mut data).map_err(Error::IoError)?;
-
-        println!("Got Data {:?}", std::str::from_utf8(&data));
+        let mut xport = HttpTransport::new(stream, "/rpc/v1");
+        let req = xport.recv_request().map_err(Error::TransportError)?;
+        println!("Server got request: {:?}", req);
+        let resp = match req {
+            ApiRequest::Hello { sender } => ApiResponse::Hello(Ok(format!("Hello, {}!", sender))),
+        };
+        xport.send_response(resp).map_err(Error::TransportError)?;
     }
 }
 
