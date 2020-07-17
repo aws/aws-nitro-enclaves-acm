@@ -21,9 +21,13 @@ RUN dnf -y install \
         golang \
         make \
         nginx \
-		opensc \
+        opensc \
+        automake \
         openssl-pkcs11 \
         p11-kit-server \
+        openssl-devel \
+        libtasn1-devel \
+        libffi-devel \
         sudo \
         diffutils \
         procps
@@ -52,7 +56,6 @@ RUN mkdir -p /tmp \
     && cd boringssl \
     && cmake -DBUILD_SHARED_LIBS=1 \
     && make -j$(getconf _NUMPROCESSORS_ONLN) crypto \
-    && mv include/openssl /usr/include/ \
     && mv crypto/libcrypto.so /usr/lib64/libcrypto_boring.so \
     && ldconfig \
     && rm -rf /tmp/boringssl

@@ -13,9 +13,12 @@ CTR_PROVISIONING_SERVER="$CTR_TARGET_DIR/vtok-srv"
 # Remove the file (if it exists)
 rm $CTR_PRV_SOCK_PATH
 
-# Start the provisioning server
-$CTR_PROVISIONING_SERVER unix $CTR_PRV_SOCK_PATH &
-
 # Start the p11-kit server
 p11-kit server -n "unix:path=$CTR_P11_SOCK_PATH" \
-        --provider $CTR_VTOK_MODULE -f -v pkcs11:
+        --provider $CTR_VTOK_MODULE -v pkcs11:
+
+# Setup privileges for application workers
+chmod 777 $CTR_P11_SOCK_PATH
+
+# Start the provisioning server
+$CTR_PROVISIONING_SERVER unix $CTR_PRV_SOCK_PATH
