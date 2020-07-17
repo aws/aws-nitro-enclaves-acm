@@ -68,10 +68,10 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(slot_id: pkcs11::CK_SLOT_ID, db: Db) -> Self {
+    pub fn new(slot_id: pkcs11::CK_SLOT_ID, db: Db, state: SessionState) -> Self {
         Self {
             slot_id,
-            state: SessionState::RoPublic,
+            state,
             db,
             enum_ctx: None,
             digest_ctx: None,

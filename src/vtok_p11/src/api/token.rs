@@ -224,7 +224,7 @@ pub extern "C" fn C_Login(
         return pkcs11::CKR_ARGUMENTS_BAD;
     }
 
-    lock_device!(guard, device);
+    lock_device_mut!(guard, device);
 
     match userType {
         pkcs11::CKU_SO => pkcs11::CKR_SESSION_READ_ONLY_EXISTS,
@@ -248,7 +248,7 @@ pub extern "C" fn C_Login(
 pub extern "C" fn C_Logout(hSession: pkcs11::CK_SESSION_HANDLE) -> pkcs11::CK_RV {
     trace!("C_Logout() called");
 
-    lock_device!(guard, device);
+    lock_device_mut!(guard, device);
 
     device
         .logout(hSession)

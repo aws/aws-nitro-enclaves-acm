@@ -33,6 +33,7 @@ pub struct Token {
     slot_id: pkcs11::CK_SLOT_ID,
     sessions: HashMap<pkcs11::CK_SESSION_HANDLE, Arc<Mutex<Session>>>,
     db: Option<Db>,
+    user_login: bool,
 }
 
 impl Token {
@@ -43,6 +44,7 @@ impl Token {
             //db: None,
             // TODO: implement proper init and remove this hardcoding
             db: Some(Db::from_test_data().unwrap()),
+            user_login: false,
         }
     }
 
@@ -104,10 +106,17 @@ impl Token {
             return Err(Error::SessionCount);
         }
         let db_clone = self.db.as_ref().cloned().ok_or(Error::TokenUninit)?;
+        let state = match self.user_login {
+            // If an active user login is present on the token, all future
+            // sessions from the user shall enter RoUser state implicitly
+            true => SessionState::RoUser,
+            false => SessionState::RoPublic,
+        };
         self.sessions.insert(
             handle,
-            Arc::new(Mutex::new(Session::new(self.slot_id, db_clone))),
+            Arc::new(Mutex::new(Session::new(self.slot_id, db_clone, state))),
         );
+
         Ok(())
     }
 
@@ -126,7 +135,7 @@ impl Token {
         self.sessions.get(&handle).cloned()
     }
 
-    pub fn login(&self, session_handle: pkcs11::CK_SESSION_HANDLE, pin: &str) -> Result<()> {
+    pub fn login(&mut self, session_handle: pkcs11::CK_SESSION_HANDLE, pin: &str) -> Result<()> {
         if self.db.as_ref().ok_or(Error::TokenUninit)?.token_pin() != pin {
             return Err(Error::PinIncorrect);
         }
@@ -147,10 +156,13 @@ impl Token {
             }
         }
 
+        // Token now has an active user login
+        self.user_login = true;
+
         Ok(())
     }
 
-    pub fn logout(&self, session_handle: pkcs11::CK_SESSION_HANDLE) -> Result<()> {
+    pub fn logout(&mut self, session_handle: pkcs11::CK_SESSION_HANDLE) -> Result<()> {
         let sarc = self
             .session(session_handle)
             .ok_or(Error::SessionHandleInvalid)?;
@@ -166,6 +178,9 @@ impl Token {
                     .set_state(SessionState::RoPublic);
             }
         }
+
+        // Token now has an inactive user login
+        self.user_login = false;
 
         Ok(())
     }
