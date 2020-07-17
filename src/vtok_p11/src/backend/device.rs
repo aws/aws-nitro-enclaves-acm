@@ -110,22 +110,22 @@ impl Device {
             .and_then(|token| token.session(handle))
     }
 
-    pub fn login(&self, session_handle: pkcs11::CK_SESSION_HANDLE, pin: &str) -> Result<()> {
+    pub fn login(&mut self, session_handle: pkcs11::CK_SESSION_HANDLE, pin: &str) -> Result<()> {
         let slot_id = *self
             .session_slot_map
             .get(&session_handle)
             .ok_or(Error::SessionHandleInvalid)?;
-        self.token(slot_id)?
+        self.token_mut(slot_id)?
             .login(session_handle, pin)
             .map_err(Error::TokenError)
     }
 
-    pub fn logout(&self, session_handle: pkcs11::CK_SESSION_HANDLE) -> Result<()> {
+    pub fn logout(&mut self, session_handle: pkcs11::CK_SESSION_HANDLE) -> Result<()> {
         let slot_id = *self
             .session_slot_map
             .get(&session_handle)
             .ok_or(Error::SessionHandleInvalid)?;
-        self.token(slot_id)?
+        self.token_mut(slot_id)?
             .logout(session_handle)
             .map_err(Error::TokenError)
     }

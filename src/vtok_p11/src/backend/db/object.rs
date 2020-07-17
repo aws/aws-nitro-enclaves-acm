@@ -167,6 +167,7 @@ impl Object {
         attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
         attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
         attrs.insert(pkcs11::CKA_PRIVATE, Attr::CK_TRUE);
+        attrs.insert(pkcs11::CKA_ALWAYS_AUTHENTICATE, Attr::CK_FALSE);
         attrs.insert(pkcs11::CKA_SENSITIVE, Attr::CK_TRUE);
         attrs.insert(pkcs11::CKA_EXTRACTABLE, Attr::CK_FALSE);
         attrs.insert(pkcs11::CKA_SIGN, Attr::CK_TRUE);
