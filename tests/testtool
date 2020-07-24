@@ -15,8 +15,8 @@ PKCS_LIB_PATH="./build/target/debug/libvtok_rs.so"
 PIN="1234"
 URI_TOKEN="pkcs11:model=Nitro-vToken;manufacturer=Amazon;serial=EVT00;token=EncryptionVault-Token;pin-value=$PIN"
 KEYS_DIR="./tests/keys/"
-RSA_KEYS="rsa2048"
-ECDSA_KEYS="secp224r1"
+RSA_KEYS="rsa1024 rsa2048 rsa4096 rsa8192"
+ECDSA_KEYS="secp224r1 secp384r1 secp521r1 prime256v1"
 
 # Exit codes
 EXIT_CODE_INVALID_PARAMS=1
@@ -828,6 +828,11 @@ test_openssl_digestsignverify_rsapss() {
     local saltlen="$3"
     local digest="$4"
 
+    # Skip RSA-1024 PSS with SHA2-512 since padding yields invalid input sizes
+    if [ $keylabel == "rsa1024" ] && [ $saltlen == 64 ] ; then
+        return;
+    fi
+
     testtemplate_generate_check \
         "${FUNCNAME[0]}" \
         "signverify/rsapss/${keylabel}" \
@@ -858,6 +863,11 @@ test_openssl_encryptdecrypt_rsa() {
     local keylabel="$2"
     local saltlen="$3"
     local digest="$4"
+
+    # Skip RSA-1024 with 128 bytes since key is to small for this size
+    if [ $keylabel == "rsa1024" ] && [ $filesize == 128 ] ; then
+        return;
+    fi
 
     testtemplate_generate_check \ "${FUNCNAME[0]}" \
         "encryptdecrypt/rsa_pkcs/${keylabel}" \
@@ -935,7 +945,10 @@ test_openssl_all() {
     echo "Running RSA RAW Sign&Verify (x509) tests using openssl"
     # For raw rsa signature the length of the input file must be equal to
     # the length of the key
+    test_openssl_signverify_rsa_x509 128 "rsa1024"
     test_openssl_signverify_rsa_x509 256 "rsa2048"
+    test_openssl_signverify_rsa_x509 512 "rsa4096"
+    test_openssl_signverify_rsa_x509 1024 "rsa8192"
 
 
     echo "Running ECDSA Sign&Verify tests using openssl"
@@ -952,7 +965,10 @@ test_openssl_all() {
         done
     done
     echo "Running RSA RAW Encrypt&Decrypt (x509) tests using openssl"
+    test_openssl_encryptdecrypt_rsa_x509 128 "rsa1024"
     test_openssl_encryptdecrypt_rsa_x509 256 "rsa2048"
+    test_openssl_encryptdecrypt_rsa_x509 512 "rsa4096"
+    test_openssl_encryptdecrypt_rsa_x509 1024 "rsa8192"
 }
 
 # Main
