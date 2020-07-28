@@ -5,13 +5,20 @@ use std::mem::size_of;
 use std::os::raw::c_uint;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::time::Duration;
 
+/// Generic stream trait - must support reading, writing, and setting a timeout
+/// for each of those two.
+pub trait Stream: Read + Write {
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> IoResult<()>;
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> IoResult<()>;
+}
 
 /// Generic listener trait, that can `accept()` connected streams of the associated type
 /// `Self::Stream`.
 pub trait Listener {
     /// The connected stream type, implementing `Read + Write`.
-    type Stream: Read + Write;
+    type Stream: Stream;
 
     /// Accept a new connected stream.
     fn accept(&self) -> IoResult<Self::Stream>;
@@ -122,6 +129,69 @@ impl std::io::Write for VsockStream {
     }
 }
 
+impl Stream for VsockStream {
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> IoResult<()> {
+        let tv = match timeout {
+            Some(dur) => libc::timeval {
+                tv_sec: dur.as_secs() as i64,
+                tv_usec: dur.subsec_micros() as i64,
+            },
+            None => libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            },
+        };
+        let rc = unsafe {
+            libc::setsockopt(
+                self.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_RCVTIMEO,
+                &tv as *const _ as *const libc::c_void,
+                std::mem::size_of::<libc::timeval>() as u32,
+            )
+        };
+        if rc != 0 {
+            return Err(IoError::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> IoResult<()> {
+        let tv = match timeout {
+            Some(dur) => libc::timeval {
+                tv_sec: dur.as_secs() as i64,
+                tv_usec: dur.subsec_micros() as i64,
+            },
+            None => libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            },
+        };
+        let rc = unsafe {
+            libc::setsockopt(
+                self.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_SNDTIMEO,
+                &tv as *const _ as *const libc::c_void,
+                std::mem::size_of::<libc::timeval>() as u32,
+            )
+        };
+        if rc != 0 {
+            return Err(IoError::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+impl Stream for UnixStream {
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> IoResult<()> {
+        UnixStream::set_read_timeout(self, timeout)
+    }
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> IoResult<()> {
+        UnixStream::set_write_timeout(self, timeout)
+    }
+}
+
 /// An AF_VSOCK listener (server)
 #[derive(Debug, Clone)]
 pub struct VsockListener {
@@ -199,7 +269,6 @@ impl Listener for UnixListener {
     type Stream = UnixStream;
 
     fn accept(&self) -> IoResult<UnixStream> {
-        UnixListener::accept(self)
-            .map(|(s, _)| s)
+        UnixListener::accept(self).map(|(s, _)| s)
     }
 }
