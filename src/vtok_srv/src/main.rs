@@ -13,7 +13,6 @@ const USAGE: &str = r#"Nitro vToken database provisioning server
 "#;
 
 enum Error {
-    ProtoError(vtok_rpc::ProtoError),
     IoError(std::io::Error),
     UsageError,
     TransportError(vtok_rpc::transport::Error),
@@ -31,7 +30,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: pretty-format error messages
         match self {
-            Self::ProtoError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
             Self::TransportError(e) => write!(f, "{:?}", e),
@@ -42,7 +40,7 @@ impl fmt::Display for Error {
 fn run_server<L: Listener>(listener: L) -> Result<(), Error> {
     println!("[vToken] Provisioning server is now running");
     loop {
-        let stream = listener.accept().map_err(Error::ProtoError)?;
+        let stream = listener.accept().map_err(Error::IoError)?;
 
         // TODO: Add vtok_rpc logic
 
@@ -73,7 +71,7 @@ fn rusty_main() -> Result<(), Error> {
                 .parse::<std::os::raw::c_uint>()
                 .map_err(|_| Error::UsageError)?;
             VsockListener::bind(VsockAddr::any_cid_with_port(port), 5)
-                .map_err(Error::ProtoError)
+                .map_err(Error::IoError)
                 .and_then(|l| run_server(l))?;
         }
         (Some("unix"), Some(path)) => {

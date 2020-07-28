@@ -1,23 +1,11 @@
 extern crate libc;
 
-use std::io::{Error as IoError, Read, Write};
+use std::io::{Error as IoError, Read, Result as IoResult, Write};
 use std::mem::size_of;
 use std::os::raw::c_uint;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 
-#[derive(Debug)]
-pub enum Error {
-    Accept(std::io::Error),
-    BadArgs,
-    BadProto,
-    Bind(std::io::Error),
-    Connect(std::io::Error),
-    Listen(std::io::Error),
-    SocketCreate(std::io::Error),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// Generic listener trait, that can `accept()` connected streams of the associated type
 /// `Self::Stream`.
@@ -26,7 +14,7 @@ pub trait Listener {
     type Stream: Read + Write;
 
     /// Accept a new connected stream.
-    fn accept(&self) -> Result<Self::Stream>;
+    fn accept(&self) -> IoResult<Self::Stream>;
 }
 
 /// A vsock address spec.
@@ -57,10 +45,10 @@ pub struct VsockStream {
 
 impl VsockStream {
     /// Create and return a VsockStream connected to `addr`.
-    pub fn connect(addr: VsockAddr) -> Result<Self> {
+    pub fn connect(addr: VsockAddr) -> IoResult<Self> {
         let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM, 0) };
         if fd < 0 {
-            return Err(Error::SocketCreate(IoError::last_os_error()));
+            return Err(IoError::last_os_error());
         }
 
         let sa = libc::sockaddr_vm {
@@ -78,7 +66,7 @@ impl VsockStream {
             )
         };
         if rc < 0 {
-            let err = Error::Connect(IoError::last_os_error());
+            let err = IoError::last_os_error();
             unsafe { libc::close(fd) };
             return Err(err);
         }
@@ -108,7 +96,7 @@ impl Drop for VsockStream {
 
 /// VsockStream Reader
 impl std::io::Read for VsockStream {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         let rc = unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
         if rc < 0 {
             Err(std::io::Error::last_os_error())
@@ -120,7 +108,7 @@ impl std::io::Read for VsockStream {
 
 /// VsockStream Writer
 impl std::io::Write for VsockStream {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
         let rc = unsafe { libc::write(self.fd, buf.as_ptr() as *mut libc::c_void, buf.len()) };
         if rc < 0 {
             Err(std::io::Error::last_os_error())
@@ -129,7 +117,7 @@ impl std::io::Write for VsockStream {
         }
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> IoResult<()> {
         Ok(())
     }
 }
@@ -143,10 +131,10 @@ pub struct VsockListener {
 impl VsockListener {
     /// Create and return a VsockListener that is bound to `addr` and ready to accept
     /// client connections.
-    pub fn bind(addr: VsockAddr, backlog: std::os::raw::c_int) -> Result<Self> {
+    pub fn bind(addr: VsockAddr, backlog: std::os::raw::c_int) -> IoResult<Self> {
         let fd = unsafe { libc::socket(libc::AF_VSOCK, libc::SOCK_STREAM, 0) };
         if fd < 0 {
-            return Err(Error::SocketCreate(IoError::last_os_error()));
+            return Err(IoError::last_os_error());
         }
 
         let mut sa = libc::sockaddr_vm {
@@ -164,13 +152,13 @@ impl VsockListener {
             )
         };
         if rc < 0 {
-            let err = Error::Bind(IoError::last_os_error());
+            let err = IoError::last_os_error();
             unsafe { libc::close(fd) };
             return Err(err);
         }
         rc = unsafe { libc::listen(fd, backlog) };
         if rc < 0 {
-            let err = Error::Listen(IoError::last_os_error());
+            let err = IoError::last_os_error();
             unsafe { libc::close(fd) };
             return Err(err);
         }
@@ -182,7 +170,7 @@ impl Listener for VsockListener {
     type Stream = VsockStream;
 
     /// Accept a client connection and return a client stream
-    fn accept(&self) -> Result<VsockStream> {
+    fn accept(&self) -> IoResult<VsockStream> {
         let mut addr: libc::sockaddr_vm = unsafe { std::mem::zeroed() };
         let mut addr_len = size_of::<libc::sockaddr_vm>() as libc::socklen_t;
         let cl_fd = unsafe {
@@ -193,7 +181,7 @@ impl Listener for VsockListener {
             )
         };
         if cl_fd < 0 {
-            return Err(Error::Accept(IoError::last_os_error()));
+            return Err(IoError::last_os_error());
         }
 
         Ok(unsafe { VsockStream::from_raw_fd(cl_fd) })
@@ -210,9 +198,8 @@ impl Drop for VsockListener {
 impl Listener for UnixListener {
     type Stream = UnixStream;
 
-    fn accept(&self) -> Result<UnixStream> {
+    fn accept(&self) -> IoResult<UnixStream> {
         UnixListener::accept(self)
             .map(|(s, _)| s)
-            .map_err(Error::Accept)
     }
 }
