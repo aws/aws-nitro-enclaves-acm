@@ -14,7 +14,6 @@ const USAGE: &str = r#"Nitro vToken Tool
 "#;
 
 enum Error {
-    ProtoError(vtok_rpc::ProtoError),
     IoError(std::io::Error),
     TransportError(vtok_rpc::transport::Error),
     UsageError,
@@ -32,7 +31,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: pretty-format error messages
         match self {
-            Self::ProtoError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
             Self::TransportError(e) => write!(f, "{:?}", e),
@@ -73,7 +71,7 @@ fn rusty_main() -> Result<(), Error> {
                 .parse::<std::os::raw::c_uint>()
                 .map_err(|_| Error::UsageError)?;
             VsockStream::connect(VsockAddr { cid, port })
-                .map_err(Error::ProtoError)
+                .map_err(Error::IoError)
                 .and_then(|s| run_client(s))?;
         }
         (Some("unix"), Some(path), None) => {
