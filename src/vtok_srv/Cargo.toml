@@ -6,6 +6,9 @@ edition = "2018"
 description = "Nitro vToken provisioning server"
 
 [dependencies]
+libc = "0.2"
+nsm-driver = { path = "../nsm-driver" }
+nsm-io = { path = "../nsm-io" }
 vtok_rpc = { path = "../vtok_rpc" }
 
 [[bin]]
