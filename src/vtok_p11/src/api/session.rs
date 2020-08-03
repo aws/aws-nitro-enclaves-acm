@@ -1,3 +1,6 @@
+// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::pkcs11;
 
 /// See PKCS#11 v2.40 Section 5.6 Session management functions

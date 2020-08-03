@@ -1,3 +1,6 @@
+// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 use super::util::copy_data_to_ck_out_slice;
 use crate::backend::Mechanism;
 use crate::crypto::OpCtxState;

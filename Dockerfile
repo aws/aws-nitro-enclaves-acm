@@ -1,3 +1,6 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # vToken enclave image Dockerfile
 #
 # Constructs a minimal image for running the Nitro vToken enclave.

@@ -1,3 +1,6 @@
+// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(non_snake_case)]

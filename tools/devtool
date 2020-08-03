@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2020 Amazon.com Inc. All Rights Reserved.
-# AMAZON.COM CONFIDENTIAL
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 # Dev container version. This should be incremented every time a change is made to the
 # dev container Dockerfile.
