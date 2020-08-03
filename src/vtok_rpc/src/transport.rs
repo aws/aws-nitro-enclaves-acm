@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::io::{BufRead, BufReader, Read, Write};
+use serde::{de::DeserializeOwned, Serialize};
 
 use super::api::{ApiRequest, ApiResponse};
 
@@ -25,9 +26,9 @@ pub trait Transport {
     /// Send an RPC request.
     fn send_request(&mut self, req: ApiRequest) -> Result<()>;
     /// Receive an RPC response.
-    fn recv_response(&mut self) -> Result<ApiResponse>;
+    fn recv_response<T: DeserializeOwned>(&mut self) -> Result<ApiResponse<T>>;
     /// Send an RPC response.
-    fn send_response(&mut self, resp: ApiResponse) -> Result<()>;
+    fn send_response<T: Serialize>(&mut self, resp: ApiResponse<T>) -> Result<()>;
 }
 
 /// RPC transport implementation via a super-simple subset of HTTP.
@@ -179,7 +180,7 @@ impl<S: Read + Write> Transport for HttpTransport<S> {
         Ok(())
     }
 
-    fn recv_response(&mut self) -> Result<ApiResponse> {
+    fn recv_response<T: DeserializeOwned>(&mut self) -> Result<ApiResponse<T>> {
         let mut reader = BufReader::new((&mut self.stream).take(Self::MAX_HDR_LEN as u64));
         let mut ln = String::new();
         reader.read_line(&mut ln).map_err(Error::IoError)?;
@@ -198,7 +199,7 @@ impl<S: Read + Write> Transport for HttpTransport<S> {
         })
     }
 
-    fn send_response(&mut self, response: ApiResponse) -> Result<()> {
+    fn send_response<T: Serialize>(&mut self, response: ApiResponse<T>) -> Result<()> {
         let body = serde_json::to_vec(&response).map_err(Error::SerdeError)?;
         self.stream
             .write(

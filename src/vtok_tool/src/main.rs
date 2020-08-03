@@ -9,6 +9,7 @@ use std::os::unix::net::UnixStream;
 use vtok_rpc::ApiRequest;
 use vtok_rpc::{HttpTransport, Transport};
 use vtok_rpc::{VsockAddr, VsockStream};
+use vtok_rpc::api::schema;
 
 const USAGE: &str = r#"Nitro vToken Tool
     Usage:
@@ -43,12 +44,24 @@ impl fmt::Display for Error {
 
 fn run_client<S: Read + Write>(stream: S) -> Result<(), Error> {
     let mut xport = HttpTransport::new(stream, "/rpc/v1");
+
+    let mut keys = Vec::new();
+    keys.push(schema::PrivateKey {
+        encrypted_pem: "--- begin pem ---".to_string(),
+        id: 1,
+        label: "privkey".to_string(),
+    });
     xport
-        .send_request(ApiRequest::Hello {
-            sender: "TestClient".to_string(),
-        })
+        .send_request(ApiRequest::AddToken(schema::AddTokenArgs {
+            token: schema::Token {
+                label: "vtoken".to_string(),
+                pin: "1234".to_string(),
+                envelope_key: schema::EnvelopeKey::KmsId("n/a".to_string()),
+                keys
+            }
+        }))
         .map_err(Error::TransportError)?;
-    let resp = xport.recv_response().map_err(Error::TransportError)?;
+    let resp: schema::AddTokenResponse = xport.recv_response().map_err(Error::TransportError)?;
     println!("Test client got reponse: {:?}", resp);
     Ok(())
 }

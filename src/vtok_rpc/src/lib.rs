@@ -8,7 +8,7 @@ pub mod api;
 pub mod proto;
 pub mod transport;
 
-pub use api::{ApiError, ApiRequest, ApiResponse, ApiResult};
+pub use api::{ApiError, ApiRequest, ApiResponse};
 pub use proto::{Listener, VsockAddr, VsockListener, VsockStream};
 pub use transport::Error as TransportError;
 pub use transport::{HttpTransport, Transport};

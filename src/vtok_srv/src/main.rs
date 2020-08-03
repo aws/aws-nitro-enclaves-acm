@@ -3,12 +3,20 @@
 
 extern crate libc;
 extern crate vtok_rpc;
+extern crate vtok_common;
+
+mod worker;
 
 use std::fmt;
 use std::os::unix::net::UnixListener;
-use vtok_rpc::{ApiRequest, ApiResponse};
-use vtok_rpc::{HttpTransport, Transport};
+use std::time::Duration;
+
+use vtok_common::{config, defs};
+use vtok_rpc::HttpTransport;
 use vtok_rpc::{Listener, VsockAddr, VsockListener};
+use vtok_rpc::proto::Stream;
+use worker::Worker;
+
 
 const USAGE: &str = r#"Nitro vToken database provisioning server
     Usage:
@@ -16,10 +24,13 @@ const USAGE: &str = r#"Nitro vToken database provisioning server
         vtoken-srv unix <path>
 "#;
 
+#[derive(Debug)]
 enum Error {
+    ConfigError(config::Error),
     IoError(std::io::Error),
     UsageError,
-    TransportError(vtok_rpc::transport::Error),
+    InitRandError,
+    WorkerError(worker::Error),
 }
 
 impl From<Error> for i32 {
@@ -34,33 +45,45 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: pretty-format error messages
         match self {
+            Self::ConfigError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
-            Self::TransportError(e) => write!(f, "{:?}", e),
+            Self::InitRandError => write!(f, "[vToken] Cannot initialize eVault RNG"),
+            Self::WorkerError(e) => write!(f, "{:?}", e),
         }
     }
 }
 
+fn handle_client<S: Stream>(stream: S) -> Result<(), Error> {
+    // TODO: worker management (e.g. concurrency, jailing, etc).
+    stream
+        .set_read_timeout(Some(Duration::from_millis(defs::RPC_STREAM_TIMEOUT_MS)))
+        .map_err(Error::IoError)?;
+    stream
+        .set_write_timeout(Some(Duration::from_millis(defs::RPC_STREAM_TIMEOUT_MS)))
+        .map_err(Error::IoError)?;
+
+
+    let xport = HttpTransport::new(stream, "/rpc/v1");
+    let mut worker = Worker::new(xport);
+    worker.run().map_err(Error::WorkerError)
+}
+
 fn run_server<L: Listener>(listener: L) -> Result<(), Error> {
+    config::Config::init_new().map_err(Error::ConfigError)?;
     println!("[vToken] Provisioning server is now running");
+
     loop {
-        let stream = listener.accept().map_err(Error::IoError)?;
-
-        // TODO: Add vtok_rpc logic
-
-        let mut xport = HttpTransport::new(stream, "/rpc/v1");
-        let req = xport.recv_request().map_err(Error::TransportError)?;
-        println!("[vToken] Server got request: {:?}", req);
-        let resp = match req {
-            ApiRequest::Hello { sender } => ApiResponse::Hello(Ok(format!("Hello, {}!", sender))),
-        };
-        xport.send_response(resp).map_err(Error::TransportError)?;
+        let client_result = listener
+            .accept()
+            .map_err(Error::IoError)
+            .and_then(|stream| handle_client(stream));
+        if let Err(e) = client_result {
+            eprintln!("Error handling client connection: {:?}", e);
+        }
     }
 }
 
-/// Parameters:
-/// AF_VSOCK: <vtoken-srv> "vsock" "4294967295" "10000"
-/// AF_UNIX:  <vtoken-srv> "unix" "some_path"
 fn rusty_main() -> Result<(), Error> {
     let mut args = std::env::args();
 
