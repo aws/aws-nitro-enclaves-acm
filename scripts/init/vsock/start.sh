@@ -10,7 +10,6 @@ VTOK_RAND_BIN="vtok-rand"
 VTOK_SRV_BIN="vtok-srv"
 P11_SERVER_PORT="9999"
 PROVISIONING_PORT="10000"
-PROVISIONING_CID="4294967295" # VMADDR_CID_ANY
 VTOK_MODULE="/usr/lib/libvtok_p11.so"
 
 # Seed the CRNG
@@ -20,7 +19,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Start the provisioning server
-"$VTOK_SRV_BIN" vsock $PROVISIONING_CID $PROVISIONING_PORT &
+"$VTOK_SRV_BIN" vsock $PROVISIONING_PORT &
 if [ $? -ne 0 ]; then
     exit 1
 fi
