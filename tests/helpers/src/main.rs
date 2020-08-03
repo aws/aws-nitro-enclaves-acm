@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::env;
-use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -106,28 +105,28 @@ fn main() -> Result<(), String> {
     let mut args = env::args();
 
     let binname = args.next().ok_or("Missing binary name".to_string())?;
-    let command = args.next().ok_or({ "Missing option".to_string() })?;
+    let command = args.next().ok_or("Missing option".to_string())?;
 
     match command.as_str() {
         "bitflip" => {
-            let filename = args.next().ok_or({ "Missing argument".to_string() })?;
+            let filename = args.next().ok_or("Missing argument".to_string())?;
             let bit: u64 = args
                 .next()
-                .ok_or({ "Missing argument".to_string() })?
+                .ok_or("Missing argument".to_string())?
                 .parse::<u64>()
                 .map_err(|e| format!("Invalid number {}", e))?;
             bitflip(filename, bit)
         }
         "prng_file" => {
-            let filename = args.next().ok_or({ "Missing argument".to_string() })?;
+            let filename = args.next().ok_or("Missing argument".to_string())?;
             let filesize: u64 = args
                 .next()
-                .ok_or({ "Missing argument".to_string() })?
+                .ok_or("Missing argument".to_string())?
                 .parse::<u64>()
                 .map_err(|e| format!("Invalid number {}", e))?;
             let seed: u32 = args
                 .next()
-                .ok_or({ "Missing argument".to_string() })?
+                .ok_or("Missing argument".to_string())?
                 .parse::<u32>()
                 .map_err(|e| format!("Invalid number {}", e))?;
             prng_file(filename, filesize, seed)
@@ -135,17 +134,17 @@ fn main() -> Result<(), String> {
         "prng_int" => {
             let seed: u32 = args
                 .next()
-                .ok_or({ "Missing argument".to_string() })?
+                .ok_or("Missing argument".to_string())?
                 .parse::<u32>()
                 .map_err(|e| format!("Invalid number {}", e))?;
             let start: u32 = args
                 .next()
-                .ok_or({ "Missing argument".to_string() })?
+                .ok_or("Missing argument".to_string())?
                 .parse::<u32>()
                 .map_err(|e| format!("Invalid number {}", e))?;
             let end: u32 = args
                 .next()
-                .ok_or({ "Missing argument".to_string() })?
+                .ok_or("Missing argument".to_string())?
                 .parse::<u32>()
                 .map_err(|e| format!("Invalid number {}", e))?;
             prng_int(seed, start, end)
