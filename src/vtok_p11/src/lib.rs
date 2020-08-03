@@ -30,14 +30,14 @@ mod defs {
     pub const SLOT_HARDWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const SLOT_FIRMWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const SLOT_MANUFACTURER: &str = "Amazon";
-    pub const MAX_SLOTS: usize = 2;
+    pub const MAX_SLOTS: usize = 4;
 
     pub const TOKEN_LABEL: &str = "EncryptionVault-Token";
     pub const TOKEN_MANUFACTURER: &str = "Amazon";
     pub const TOKEN_MODEL: &str = "Nitro-vToken";
-    pub const TOKEN_MAX_SESSIONS: pkcs11::CK_ULONG = 20;
+    pub const TOKEN_MAX_SESSIONS: pkcs11::CK_ULONG = 1024;
     pub const TOKEN_MAX_RW_SESSIONS: pkcs11::CK_ULONG = 0;
-    pub const TOKEN_MAX_PIN_LEN: pkcs11::CK_ULONG = 32;
+    pub const TOKEN_MAX_PIN_LEN: pkcs11::CK_ULONG = 64;
     pub const TOKEN_MIN_PIN_LEN: pkcs11::CK_ULONG = 4;
     pub const TOKEN_HARDWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const TOKEN_FIRMWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
