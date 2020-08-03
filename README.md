@@ -1,7 +1,7 @@
 # Aws Certificate Manager for Nitro Enclaves
 
-This is an early PoC for a PKCS#11 provider intended to be executed within the
-confines of a Nitro Enclave.
+This is a PKCS#11 provider intended to be executed within the confines of a
+Nitro Enclave.
 
 Development is aided by a Docker container that can be used to build and test
 run the PKCS#11 provider as a `p11-kit` module. This container is designed to
@@ -36,7 +36,7 @@ Here is the general flow of a parent instance crypto operation:
                                           |    ACM for Nitro Enclaves module
                                           |              |
                                           |              v
-                                          |      BoringSSL libcrypto
+                                          |	    AWS libcrypto
 ```
 
 ## Dependencies
@@ -65,7 +65,7 @@ tools/devtool build
 ```
 
 
-## Testing
+## Testing in the development environment
 
 `devtool` uses the development container to simulate both the enclave and
 parent instance environments. The communication channel between `p11-kit
@@ -102,10 +102,27 @@ running `openssl` manually, directed to use the PKCS#11 engine and an URI
 pointing to the pkcs#11 provider module token:
 
 ```bash
-openssl pkeyutl -keyform engine -engine pkcs11 -verify -pubin \
-    -inkey "pkcs11:model=Nitro%20Token;manufacturer=Amazon;serial=sn%3A%201234;token=Nitro%20vToken;pin-value=1234" \
-    -sigfile test.sig -in hello.txt
+openssl pkeyutl -keyform engine -engine pkcs11 -sign -inkey \
+	"pkcs11:model=Nitro-vToken;manufacturer=Amazon;serial=EVT00;token=EncryptionVault-Token;id=%52;type=private" \
+	-in hello.txt -out test.sig
 ```
+
+The `tests` directory contains integration tests that can be executed to
+validate the PKCS#11 module functionality using openssl or OpenSC pkcs11-tool.
+Tests can be executer via:
+```bash
+./tests/testtool openssl
+```
+The above test suite is also applicable when using real enclaves.
+
+
+## Testing with an enclave
+
+The root directory of this project contains an enclave reference Dockerfile using
+Alpine base for building the deliverables and then a scratch image for the run-time
+image. The image spawns the provisioning server and the p11-kit server respectively
+as init. This Docker image which can be used as input in the `nitro-cli` builder for
+generating a bootable EIF image. See the `nitro-cli` documentation for more details.
 
 ## Security
 
