@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+echo "stderr test" >&2
+echo "stdout test"
+
+
