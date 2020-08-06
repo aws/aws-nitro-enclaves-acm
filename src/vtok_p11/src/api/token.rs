@@ -105,29 +105,12 @@ pub extern "C" fn C_GetTokenInfo(
 }
 
 pub extern "C" fn C_InitToken(
-    slotID: pkcs11::CK_SLOT_ID,
-    pPin: *mut pkcs11::CK_UTF8CHAR,
-    ulPinLen: pkcs11::CK_ULONG,
+    _slotID: pkcs11::CK_SLOT_ID,
+    _pPin: *mut pkcs11::CK_UTF8CHAR,
+    _ulPinLen: pkcs11::CK_ULONG,
     _pLabel: *mut pkcs11::CK_UTF8CHAR,
 ) -> pkcs11::CK_RV {
-    trace!("C_InitToken() called");
-    if pPin.is_null() {
-        error!("C_InitToken called with NULL PIN");
-        return pkcs11::CKR_ARGUMENTS_BAD;
-    }
-
-    // Already checked for NULL.
-    let pin_slice = unsafe { std::slice::from_raw_parts(pPin, ulPinLen as usize) };
-    let pin = match std::str::from_utf8(pin_slice) {
-        Ok(pin) => pin,
-        Err(_) => return pkcs11::CKR_PIN_INVALID,
-    };
-
-    lock_device_mut!(guard, device);
-    device
-        .init_token(slotID, pin)
-        .map(|_| pkcs11::CKR_OK)
-        .unwrap_or_else(|e| e.into())
+    pkcs11::CKR_FUNCTION_NOT_SUPPORTED
 }
 
 pub extern "C" fn C_GetMechanismList(

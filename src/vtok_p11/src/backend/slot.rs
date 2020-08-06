@@ -14,17 +14,17 @@ pub struct Slot {
 }
 
 impl Slot {
-    pub fn _new(id: pkcs11::CK_SLOT_ID) -> Self {
+    pub fn new(id: pkcs11::CK_SLOT_ID) -> Self {
         Self {
             _id: id,
             token: None,
         }
     }
 
-    pub fn new_with_default_token(id: pkcs11::CK_SLOT_ID) -> Self {
+    pub fn new_with_token(id: pkcs11::CK_SLOT_ID, token: Token) -> Self {
         Self {
             _id: id,
-            token: Some(Token::new(id)),
+            token: Some(token),
         }
     }
 

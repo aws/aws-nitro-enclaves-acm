@@ -172,8 +172,11 @@ pub extern "C" fn C_Initialize(pInitArgs: pkcs11::CK_VOID_PTR) -> pkcs11::CK_RV 
     if maybe_device.is_some() {
         return pkcs11::CKR_CRYPTOKI_ALREADY_INITIALIZED;
     }
-    maybe_device.replace(Device::new());
-    pkcs11::CKR_OK
+
+    Device::new()
+        .map(|device| maybe_device.replace(device))
+        .map(|_| pkcs11::CKR_OK)
+        .unwrap_or_else(|e| e.into())
 }
 
 pub extern "C" fn C_Finalize(pReserved: pkcs11::CK_VOID_PTR) -> pkcs11::CK_RV {
