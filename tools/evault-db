@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+MY_VERSION="1.0"
+MY_NAME="evault-db"
+MY_DESC="Nitro eVault database formatting tool"
+
+USAGE="\
+$MY_NAME v$MY_VERSION - $MY_DESC
+Usage: $(basename "$0") <command> [arguments]
+
+Commands:
+
+    pack-key        Packs an input PEM private key into an eVault
+                    specific object format.
+
+    --id            <private-key id>
+    --label         <private-key label>
+    --key-file      <input PEM file>
+    --out-file      <output file>
+"
+
+# Database format converter
+cmd_pack-key() {
+
+    if [ "$#" -ne 8 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --id) id="$2"; shift ;;
+            --label) label="$2"; shift ;;
+            --key-file) key_file="$2"; shift ;;
+            --out-file) out_file="$2"; shift ;;
+            *) cmd_help; die "Invalid arguments. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+    # The key file
+    if [ ! -f "$key_file" ]; then
+        die "Cannot find the input key file."
+    fi
+
+    # Read and pack the key
+    local key
+    key=$(<"$key_file")
+    ok_or_die "Cannot open the input file."
+
+    local out_data
+    out_data=$( jq -Rn \
+            --arg a "$key" \
+            --arg b "$id" \
+            --arg c "$label" \
+            '{encrypted_pem: $a, id: $b | tonumber, label: $c}' )
+    ok_or_die "Cannot format the input key."
+
+    echo "$out_data" > "$out_file.db"
+    ok_or_die "Cannot write to output file."
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit "$code"
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Send a text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+cmd_help() {
+    echo "$USAGE"
+}
+
+main() {
+    if [ "$#" -eq 0 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    local cmd="$1"
+
+    declare -f "cmd_$cmd" > /dev/null
+    ok_or_die "Unknown command: $1. Please use \`$0 help\` for help."
+
+    cmd_"$@"
+}
+
+main "${@}"
+
