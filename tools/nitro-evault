@@ -1,0 +1,483 @@
+#!/usr/bin/env bash
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+set -u
+
+MY_VERSION="1.0"
+MY_NAME="nitro-evault"
+MY_DESC="Nitro eVault management tool"
+EVAULT_DIRECTORY="evault"
+EVAULT_IMAGE="evault.eif"
+NITRO_CLI="nitro-cli"
+NITRO_VTOKEN="nitro-vtoken"
+NITRO_CONFIG="nitro-cli-config.sh"
+P11KIT_CLIENT_MODULE=".config/pkcs11/modules"
+P11KIT_CLIENT_CONFIG="evault.module"
+P11KIT_PROVIDER_NAME="libvtok_p11.so"
+PROVISIONING_SERVER_PORT="10000"
+AF_UNIX_RPC_FILE="/vtok/build/rpc.sock"
+P11KIT_SERVER_PORT="9999"
+DEFAULT_CPUS="2"
+DEFAULT_MEMORY="256"
+
+# RPCs
+RPC_ADD_TOKEN="AddToken"
+RPC_REMOVE_TOKEN="RemoveToken"
+RPC_UPDATE_TOKEN="UpdateToken"
+RPC_REFRESH_TOKEN="RefreshToken"
+RPC_DESCRIBE_DEVICE="DescribeDevice"
+RPC_DESCRIBE_TOKEN="DescribeToken"
+
+USAGE="\
+$MY_NAME v$MY_VERSION - $MY_DESC
+Usage: $(basename "$0") <command> [arguments]
+
+Commands:
+
+    start           Start the eVault enclave
+        --cpu-count     <cpu-count>
+        --memory        <memory>
+
+    init-token      Initialize an eVault token
+        --key-db        <key.db>
+        --label         <label>
+        --pin           <pin>
+        --aws-id        <AWS_ACCESS_KEY_ID>
+        --aws-secret    <AWS_SECRET_ACCESS_KEY>
+
+    update-token    Update an eVault token
+        --key-db        <new-key.db>
+        --label         <label>
+        --pin           <pin>
+        --aws-id        <AWS_ACCESS_KEY_ID>
+        --aws-secret    <AWS_SECRET_ACCESS_KEY>
+
+    refresh-token   Refresh an eVault token
+        --label         <label>
+        --pin           <pin>
+        --aws-id        <AWS_ACCESS_KEY_ID>
+        --aws-secret    <AWS_SECRET_ACCESS_KEY>
+
+    release-token   Release an eVault token
+        --label         <label>
+        --pin           <pin>
+
+    describe-device Get information about the eVault device
+
+    describe-token  Get information about an eVault vToken
+        --label         <label>
+        --pin           <pin>
+
+    stop            Stop the eVault enclave
+"
+
+# Get the eVault image path
+#
+get_image_path() {
+    local image_path
+    image_path="$HOME/$EVAULT_DIRECTORY/$EVAULT_IMAGE"
+    echo "$image_path"
+}
+
+# Ensure the eVault image is present
+#
+ensure_image_installed() {
+    local path
+    path=$(get_image_path)
+
+    if [ ! -f "$path" ]; then
+        die "The Nitro Evault enclave image is missing. Aborting."
+    fi
+}
+
+# Ensure nitro-cli tool is installed
+#
+ensure_nitro_cli() {
+    which "$NITRO_CLI" > /dev/null 2>&1
+    ok_or_die "The nitro-cli tool is not installed. Aborting."
+}
+
+# Ensure nitro-vtoken tool is installed
+#
+ensure_nitro_vtoken() {
+    which "$NITRO_VTOKEN" > /dev/null 2>&1
+    ok_or_die "The nitro-vtoken tool is not installed. Aborting."
+}
+
+# Keep p11-kit client-side configuration in sync with the current
+# eVault enclave vsock CID.
+#
+create_p11kit_client_config() {
+    local cid
+    cid=$("$NITRO_CLI" describe-enclaves | jq '.[] | .EnclaveCID')
+    ok_or_die "Cannot get eVault enclave CID."
+
+    local remote
+    remote="remote:vsock:cid=$cid;port=$P11KIT_SERVER_PORT"
+    local module
+    module="module:$P11KIT_PROVIDER_NAME"
+
+    mkdir -p "$HOME/$P11KIT_CLIENT_MODULE"
+    ok_or_die "Cannot create p11-kit client evault config directory."
+    touch "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
+    ok_or_die "Cannot create p11-kit client evault config file."
+    echo "$remote" > "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
+    ok_or_die "Cannot update p11-kit client evault config."
+    echo "$module" >> "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
+    ok_or_die "Cannot update p11-kit client evault config."
+}
+
+# Cleanup module configuration
+#
+remove_p11kit_client_config() {
+    rm "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
+    ok_or_die "Cannot remove p11-kit client evault config directory."
+}
+
+# Prepare eVault enclave memory and cpu configuration
+#
+nitro_cli_config() {
+    # Tool is under <nitro-cli-install-dir>/tools/nitro-cli-config.sh
+    local full_path
+    full_path=$(which "$NITRO_CONFIG")
+    local config_path
+    config_path=${full_path%/tools/"$NITRO_CONFIG"}
+
+    if [ ! -d "$config_path" ]; then
+        die "Cannot find the nitro-cli-config install directory."
+    fi
+
+    local cpu_count="$1"
+    local memory="$2"
+
+    # Use the install directory
+    "$NITRO_CONFIG" -d "$config_path" -b -i -m "$memory" -t "$cpu_count" > /dev/null 2>&1
+    ok_or_die "Cannot initialize the nitro-cli environment."
+}
+
+# Start the eVault
+#
+cmd_start() {
+    ensure_nitro_cli
+    ensure_image_installed
+    
+    if [ "$#" -eq 4 ]; then
+        while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --cpu-count) cpu_count="$2"; shift ;;
+            --memory) memory="$2"; shift ;;
+            *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
+        esac
+        shift
+    done
+    elif [ "$#" -eq 0 ]; then
+        # Default minimal eVault enclave configuration
+        cpu_count="$DEFAULT_CPUS"
+        memory="$DEFAULT_MEMORY"
+    else
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    # Check if eVault is already running
+    local id
+    id=$("$NITRO_CLI" describe-enclaves | jq -r '.[] | .EnclaveID')
+    if [ ! -z "$id" ]; then
+        die "The eVault enclave is already running."
+    fi
+
+    # Configure the nitro-cli environment
+    nitro_cli_config "$cpu_count" "$memory"
+    
+    # Spawn the eVault enclave
+    local eif_path
+    eif_path=$(get_image_path)
+    "$NITRO_CLI" run-enclave --cpu-count "$cpu_count" --memory "$memory" --eif-path "$eif_path" > /dev/null 2>&1
+    ok_or_die "Cannot start the eVault enclave"
+
+    say "Successfully started the eVault enclave."
+
+    create_p11kit_client_config
+}
+
+# Stop the eVault
+#
+cmd_stop() {
+    ensure_nitro_cli
+
+    if [ "$#" -ne 0 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    local id
+    id=$("$NITRO_CLI" describe-enclaves | jq -r '.[] | .EnclaveID')
+    if [ -z "$id" ]; then
+        die "No eVault enclave is currently running."
+    fi
+
+    "$NITRO_CLI" terminate-enclave --enclave-id "$id" > /dev/null 2>&1
+    ok_or_die "Cannot stop the eVault enclave."
+
+    say "Successfully stopped the eVault enclave."
+
+    remove_p11kit_client_config
+}
+
+# Issue a RPC call
+#
+execute_rpc() {
+    if [ "$#" -ne 2 ]; then
+        die "Bad execute_rpc() call."
+    fi
+
+    local rpc_opcode="$1"
+    local rpc_args="$2"
+
+    # Construct the server address
+    if test -S "$AF_UNIX_RPC_FILE"; then
+        # AF_UNIX transport (dev environment)
+        server_path="unix:$AF_UNIX_RPC_FILE"
+    else # AF_VSOCK transport
+        local cid
+        cid=$("$NITRO_CLI" describe-enclaves | jq '.[] | .EnclaveCID')
+        if [ -z "$cid" ]; then
+            die "The eVault enclave is no longer running."
+        fi
+        server_path="vsock:$cid:$PROVISIONING_SERVER_PORT"
+    fi
+
+    # Execute the RPC
+    local result
+    result=$(echo "$rpc_args" | "$NITRO_VTOKEN" raw-rpc --server "$server_path" --proc "$rpc_opcode")
+    echo "$result"
+}
+
+# Initialize a token
+#
+cmd_init-token() {
+    ensure_nitro_vtoken
+
+    if [ "$#" -ne 10 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --key-db) key_db="$2"; shift ;;
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            --aws-id) aws_id="$2"; shift;;
+            --aws-secret) aws_secret="$2"; shift ;;
+            *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
+        esac
+        shift
+    done
+
+    # The key DB file
+    if [ ! -f "$key_db" ]; then
+        die "Cannot find the key database file"
+    fi
+
+    local keys
+    keys="$(<"$key_db")"
+
+    # The envelope key
+    # TODO: When KMS is available
+    local envelope_key
+    envelope_key=$( jq -Rn \
+                '{KmsId : "n/a"}')
+    ok_or_die "Cannot construct KmsId credentials."
+
+    # AddTokenArgs #TODO: Use aws_id and aws_secret
+    local rpc_args
+    rpc_args=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            --argjson c "$envelope_key" \
+            --argjson d "$keys" \
+            '{ token: {label: $a, pin: $b, envelope_key: $c, keys: [ $d ]}}')
+    ok_or_die "Cannot construct eVault token initialization message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$RPC_ADD_TOKEN" "$rpc_args")
+    echo "$result" | jq
+}
+
+# Refresh a token
+#
+cmd_refresh-token() {
+    ensure_nitro_vtoken
+
+    if [ "$#" -ne 8 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            --aws-id) aws_id="$2"; shift;;
+            --aws-secret) aws_secret="$2"; shift ;;
+            *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
+        esac
+        shift
+    done
+
+    # RefreshToken
+    local rpc_args
+    rpc_args=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            --arg c "$aws_id" \
+            --arg d "$aws_secret" \
+            '{label: $a, pin: $b, aws_id: $c, aws_secret: $d}')
+    ok_or_die "Cannot construct eVault token refresh message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$RPC_REFRESH_TOKEN" "$rpc_args")
+    echo "$result" | jq
+}
+
+# Release a token
+#
+cmd_release-token() {
+    ensure_nitro_vtoken
+
+    if [ "$#" -ne 4 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
+        esac
+        shift
+    done
+
+    # RemoveTokenArgs
+    local rpc_args
+    rpc_args=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            '{label: $a, pin: $b}')
+    ok_or_die "Cannot construct eVault token release message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$RPC_REMOVE_TOKEN" "$rpc_args")
+    echo "$result" | jq
+}
+
+# Get the device status
+#
+cmd_describe-device() {
+    ensure_nitro_vtoken
+
+    if [ "$#" -ne 0 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    # DescribeDevice
+    local rpc_args
+    rpc_args=$( jq -Rn \
+            '{device: "eVault"}')
+    ok_or_die "Cannot construct eVault describe device message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$RPC_DESCRIBE_DEVICE" "$rpc_args")
+    echo "$result" | jq
+}
+
+# Describe a token
+#
+cmd_describe-token() {
+    ensure_nitro_vtoken
+
+    if [ "$#" -ne 4 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
+        esac
+        shift
+    done
+
+    # DescribeTokenArgs
+    local rpc_args
+    rpc_args=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            '{label: $a, pin: $b}')
+    ok_or_die "Cannot construct eVault describe token message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$RPC_DESCRIBE_TOKEN" "$rpc_args")
+    echo "$result" | jq
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit "$code"
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Send a text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a decorated message to stdout, followed by a new line
+#
+say() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Print usage
+#
+cmd_help() {
+    echo "$USAGE"
+}
+
+main() {
+
+    if [ "$#" -eq 0 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    cmd="$1"
+
+    declare -f "cmd_$cmd" > /dev/null
+    ok_or_die "Unknown command: $1. Please use \`$MY_NAME help\` for help."
+
+    cmd_"$@"
+}
+
+main "${@}"
