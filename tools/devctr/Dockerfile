@@ -30,7 +30,9 @@ RUN dnf -y install \
         libffi-devel \
         sudo \
         diffutils \
-        procps
+        procps \
+        jq \
+        which
 
 # Configure nginx.
 #
