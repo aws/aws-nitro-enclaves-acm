@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use vtok_common::config;
+
 use crate::defs;
 use crate::pkcs11;
 
@@ -34,27 +36,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// that respective session.
 pub struct Token {
     slot_id: pkcs11::CK_SLOT_ID,
+    label: String,
     sessions: HashMap<pkcs11::CK_SESSION_HANDLE, Arc<Mutex<Session>>>,
     db: Option<Db>,
     user_login: bool,
 }
 
 impl Token {
-    pub fn new(slot_id: pkcs11::CK_SLOT_ID) -> Self {
-        Self {
-            slot_id,
-            sessions: HashMap::new(),
-            //db: None,
-            // TODO: implement proper init and remove this hardcoding
-            db: Some(Db::from_test_data().unwrap()),
-            user_login: false,
-        }
-    }
 
-    pub fn init(&mut self, _pin: &str) -> Result<()> {
-        // TODO: implement proper DB loading
-        self.db = Some(Db::from_test_data().map_err(Error::DbLoad)?);
-        Ok(())
+    pub fn from_config(slot_id: pkcs11::CK_SLOT_ID, token_config: &config::Token) -> Result<Self> {
+        Ok(Self {
+            slot_id,
+            label: token_config.label.clone(),
+            sessions: HashMap::new(),
+            db: Some(Db::from_token_config(token_config).map_err(Error::DbLoad)?),
+            user_login: false,
+        })
     }
 
     pub fn ck_info(&self) -> pkcs11::CK_TOKEN_INFO {
@@ -83,7 +80,7 @@ impl Token {
         let serial = format!("EVT{:02}", self.slot_id);
 
         pkcs11::CK_TOKEN_INFO {
-            label: ck_padded_str!(defs::TOKEN_LABEL, 32),
+            label: ck_padded_str!(self.label.as_str(), 32),
             manufacturerID: ck_padded_str!(defs::TOKEN_MANUFACTURER, 32),
             model: ck_padded_str!(defs::TOKEN_MODEL, 16),
             serialNumber: ck_padded_str!(serial.as_str(), 16),

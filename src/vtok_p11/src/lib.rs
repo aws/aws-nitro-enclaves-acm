@@ -4,6 +4,8 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate serde;
+extern crate serde_json;
 
 #[macro_use]
 mod util;
@@ -35,7 +37,6 @@ mod defs {
     pub const SLOT_MANUFACTURER: &str = "Amazon";
     pub const MAX_SLOTS: usize = 4;
 
-    pub const TOKEN_LABEL: &str = "EncryptionVault-Token";
     pub const TOKEN_MANUFACTURER: &str = "Amazon";
     pub const TOKEN_MODEL: &str = "Nitro-vToken";
     pub const TOKEN_MAX_SESSIONS: pkcs11::CK_ULONG = 1024;

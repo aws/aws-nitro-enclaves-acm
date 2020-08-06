@@ -1,6 +1,8 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+use vtok_common::config::Config;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -20,16 +22,26 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
+
+        let config = Config::load_ro().map_err(|_| Error::GeneralError)?;
+
         let mut slots = Vec::with_capacity(defs::MAX_SLOTS);
-        for i in 0..defs::MAX_SLOTS {
-            slots.push(Slot::new_with_default_token(i as pkcs11::CK_SLOT_ID));
+        for (slot_id, slot_config) in config.slots().iter().enumerate() {
+            slots.push(match slot_config {
+                None => Slot::new(slot_id as pkcs11::CK_SLOT_ID),
+                Some(token_config) => Slot::new_with_token(
+                    slot_id as pkcs11::CK_SLOT_ID,
+                    Token::from_config(slot_id as pkcs11::CK_SLOT_ID, &token_config).map_err(Error::TokenError)?
+                )
+            });
         }
-        Self {
+
+        Ok(Self {
             slots,
             session_slot_map: HashMap::new(),
             next_session_handle: 1,
-        }
+        })
     }
 
     pub fn ck_info(&self) -> pkcs11::CK_INFO {
@@ -61,11 +73,6 @@ impl Device {
             .iter()
             .filter(|slot| !must_have_token || slot.has_token())
             .count()
-    }
-
-    pub fn init_token(&mut self, slot_id: pkcs11::CK_SLOT_ID, pin: &str) -> Result<()> {
-        self.token_mut(slot_id)
-            .and_then(|tok| tok.init(pin).map_err(Error::TokenError))
     }
 
     pub fn open_session(
