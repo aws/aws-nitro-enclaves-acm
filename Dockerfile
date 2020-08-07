@@ -21,8 +21,7 @@
 FROM alpine:3.12 as builder
 
 # Install system dependencies / packages.
-RUN apk add p11-kit-server \
-        cmake \
+RUN apk add cmake \
         g++ \
         gcc \
         git \
@@ -31,15 +30,25 @@ RUN apk add p11-kit-server \
         curl \
         make
 
-# Install Rust from stable
+# Install Rust 1.44.0
 ENV PATH="/root/.cargo/bin:$PATH"
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain 1.44.0
+
+# Build p11-kit from source (0.23.20 and 0.23.19 have broken the RPC compatibility)
+RUN apk add automake autoconf libtasn1-dev libffi-dev gettext-dev libtool
+RUN mkdir -p /build/output/p11-kit-build
+WORKDIR /build/output/p11-kit-build
+RUN wget https://github.com/p11-glue/p11-kit/archive/0.23.19.tar.gz
+RUN tar xf 0.23.19.tar.gz && cd p11-kit-0.23.19 && \
+        ./autogen.sh && ./configure --disable-debug --prefix=/usr \
+        --sysconfdir=/etc --with-trust-paths=/etc/pki/anchors && \
+        make && make install
 
 # Build boringssl libcrypto
 ENV BORINGSSL_GIT="https://github.com/google/boringssl.git"
-RUN mkdir -p /build \
-    && cd /build \
-    && git clone -b chromium-stable "$BORINGSSL_GIT" boringssl \
+RUN mkdir -p /build
+WORKDIR /build
+RUN git clone -b chromium-stable "$BORINGSSL_GIT" boringssl \
     && cd boringssl \
     && cmake -DBUILD_SHARED_LIBS=1 . \
     && make crypto \
@@ -54,7 +63,7 @@ RUN RUSTFLAGS="-C target-feature=-crt-static" cargo build --release && \
     strip --strip-all \
     build/target/release/vtok-srv \
     build/target/release/libvtok_p11.so
-    
+
 # Collect the vToken server dependencies by parsing the ldd output
 ENV VTOK_SRV="vtok-srv"
 RUN mkdir -p /build/output/vtok_srv
@@ -69,6 +78,7 @@ WORKDIR /build/output/vtok_lib
 RUN cp /build/vtoken/build/target/release/"$VTOK_P11" . && \
     ldd "$VTOK_P11" | tr -s '[:blank:]' '\n' | grep '^/' | \
     xargs -I % sh -c 'mkdir -p $(dirname deps%); cp % deps%;'
+
 # Collect p11-kit-server dependencies by parsing the ldd output
 ENV P11_KIT="p11-kit"
 ENV P11_KIT_SRV="p11-kit-server"
@@ -107,7 +117,7 @@ COPY ./tools/enclave/start.sh /rootfs/
 
 # vToken run-time data and provisioning directory
 # Shall be populated at run-time with vToken data and provisioning blobs.
-RUN mkdir -p /rootfs/vtok
+RUN mkdir -p /rootfs/vtok/device/
 
 # Print the rootfs (debugging helper)
 RUN find /rootfs/ -type f -exec ls -lh {} \;
