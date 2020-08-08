@@ -11,7 +11,7 @@ DEVCTR_IMG="vtokp11-dev:v$DEVCTR_VERSION"
 ENCLAVE_CTR="vtokrs-enclave"
 PARENT_CTR="vtokrs-parent"
 VTOK_SO_NAME="libvtok_p11.so"
-ENCLAVE_INIT="start_unix.sh"
+ENCLAVE_INIT="start.sh"
 
 THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
 VTOK_SRC_DIR="$(cd "$THIS_DIR/.." && pwd)"
@@ -22,7 +22,7 @@ CTR_SRC_DIR="/vtok"
 CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_SO_PATH="$CTR_BUILD_DIR/target/debug/$VTOK_SO_NAME"
 CTR_P11_SOCK_PATH="$CTR_BUILD_DIR/p11.sock"
-ENCLAVE_CTR_INIT="$CTR_SRC_DIR/tools/enclave/$ENCLAVE_INIT"
+ENCLAVE_CTR_INIT="$CTR_SRC_DIR/scripts/init/unix/$ENCLAVE_INIT"
 
 USAGE="\
 $MY_NAME

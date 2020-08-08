@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Setup $PATH for eVault deliverables
-# Used for automated builds
-EVAULT_INSTALL_DIR=/home/ec2-user/evault/bin
+# Default boot-time setup used for AL2 images
+USER=$(whoami)
+EVAULT_INSTALL_DIR=/home/$USER/evault/bin
 export PATH="$EVAULT_INSTALL_DIR:$PATH"
