@@ -124,6 +124,11 @@ image. The image spawns the provisioning server and the p11-kit server respectiv
 as init. This Docker image which can be used as input in the `nitro-cli` builder for
 generating a bootable EIF image. See the `nitro-cli` documentation for more details.
 
+The eVault enclave docker image can be built by executing the root builder script:
+```bash
+./evault-build build --tag <my-tag> --token <my-github-token>
+```
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
@@ -131,4 +136,5 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
+
 

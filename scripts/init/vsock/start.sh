@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/usr/bin/env bash
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 # The vToken enclave initialization script over AF_VSOCK transport
 
