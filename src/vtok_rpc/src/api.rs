@@ -46,12 +46,13 @@ pub mod schema {
     pub type AddTokenResponse = ApiResponse<()>;
 
     #[derive(Debug, Deserialize, Serialize)]
-    pub struct UpdateTokenArgs {
+    pub struct RefreshTokenArgs {
         pub label: String,
         pub pin: String,
-        pub token: Token,
+        pub aws_id: String,
+        pub aws_secret: String,
     }
-    pub type UpdateTokenResponse = ApiResponse<()>;
+    pub type RefreshTokenResponse = ApiResponse<()>;
 
     #[derive(Debug, Deserialize, Serialize)]
     pub struct RemoveTokenArgs {
@@ -59,6 +60,15 @@ pub mod schema {
         pub pin: String,
     }
     pub type RemoveTokenResponse = ApiResponse<()>;
+
+    #[derive(Debug, Deserialize, Serialize)]
+    pub struct UpdateTokenArgs {
+        pub label: String,
+        pub pin: String,
+        pub token: Token,
+    }
+    pub type UpdateTokenResponse = ApiResponse<()>;
+
 }
 
 /// An RPC API request, holding the API endpoint (i.e. procedure) and its input params.
@@ -68,6 +78,7 @@ pub mod schema {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ApiRequest {
     AddToken(schema::AddTokenArgs),
+    RefreshToken(schema::RefreshTokenArgs),
     RemoveToken(schema::RemoveTokenArgs),
     UpdateToken(schema::UpdateTokenArgs),
 }
@@ -141,6 +152,10 @@ pub mod validators {
                     validate_token_pin(args.pin.as_str())?;
                     validate_token_label(args.label.as_str())?;
                     validate_token(&args.token)?;
+                }
+                Self::RefreshToken(args) => {
+                    validate_token_pin(args.pin.as_str())?;
+                    validate_token_label(args.label.as_str())?;
                 }
                 Self::RemoveToken(args) => {
                     validate_token_pin(args.pin.as_str())?;

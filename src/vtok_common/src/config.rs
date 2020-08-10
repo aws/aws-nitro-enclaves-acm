@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fs::OpenOptions;
-use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use crate::defs;
+use crate::util;
 use crate::util::LockedFile;
 
 #[derive(Debug)]
@@ -26,6 +27,9 @@ pub struct Token {
     pub label: String,
     pub private_keys: Vec<PrivateKey>,
     pub pin: String,
+    /// Token expiry timestamp, in seconds. When CLOCK_MONOTONIC reaches this value, the token
+    /// is no longer usable.
+    pub expiry_ts: u64,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -78,7 +82,7 @@ impl Config {
     /// The config file lock is held only until the the data is read and parsed.
     pub fn load_ro() -> Result<Self, Error> {
         let mut file = LockedFile::open_ro(defs::DEVICE_CONFIG_PATH).map_err(Error::IoError)?;
-        let device = serde_json::from_reader(BufReader::new(file.as_mut_file())).map_err(Error::SerdeError)?;
+        let device = Self::load_device(file.as_mut_file())?;
         Ok(Self { device, file: None })
     }
 
@@ -86,10 +90,7 @@ impl Config {
     /// The config lock is held for the entire lifetime of the returned object.
     pub fn load_rw() -> Result<Self, Error> {
         let mut file = LockedFile::open_rw(defs::DEVICE_CONFIG_PATH).map_err(Error::IoError)?;
-        let device = {
-            let reader = BufReader::new(file.as_mut_file());
-            serde_json::from_reader(reader).map_err(Error::SerdeError)?
-        };
+        let device = Self::load_device(file.as_mut_file())?;
         Ok(Self { device, file: Some(file) })
     }
 
@@ -110,5 +111,20 @@ impl Config {
 
     pub fn slots_mut(&mut self) -> &mut [Option<Token>] {
         &mut self.device.slots
+    }
+
+    fn load_device<R: Read>(src: R) -> Result<Device, Error> {
+        let mut device: Device = serde_json::from_reader(BufReader::new(src)).map_err(Error::SerdeError)?;
+        for slot in device.slots.iter_mut() {
+            let expired = slot
+                .as_ref()
+                .and_then(|tok| tok.expiry_ts.checked_sub(util::time::monotonic_secs()))
+                .filter(|t| *t > 0)
+                .is_none();
+            if expired {
+                slot.take();
+            }
+        }
+        Ok(device)
     }
 }
