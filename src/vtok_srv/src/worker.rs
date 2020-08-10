@@ -1,7 +1,7 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use vtok_common::config;
+use vtok_common::{config, defs, util};
 use vtok_rpc::{Transport, TransportError};
 use vtok_rpc::api::{ApiError, ApiRequest};
 use vtok_rpc::api::schema;
@@ -32,6 +32,7 @@ impl<T> Worker<T> where T: Transport {
             .map_err(ApiError::InvalidArgs)
             .and_then(|_| match request {
                 ApiRequest::AddToken(args) => Self::add_token(args),
+                ApiRequest::RefreshToken(args) => Self::refresh_token(args),
                 ApiRequest::RemoveToken(args) => Self::remove_token(args),
                 ApiRequest::UpdateToken(_args) => Err(ApiError::Nyi),
             });
@@ -81,7 +82,35 @@ impl<T> Worker<T> where T: Transport {
             label: args.token.label,
             pin: args.token.pin,
             private_keys,
+            expiry_ts: util::time::monotonic_secs() + defs::TOKEN_EXPIRY_SECS,
         });
+
+        config.save().map_err(|_| ApiError::InternalError)?;
+
+        Ok(())
+    }
+
+    fn refresh_token(args: schema::RefreshTokenArgs) -> schema::RefreshTokenResponse {
+        let mut config = config::Config::load_rw()
+            .map_err(|_| ApiError::InternalError)?;
+        let slot = config
+            .slots_mut()
+            .iter_mut()
+            .find(|s| match s {
+                None => false,
+                Some(tok) => tok.label == args.label
+            })
+            .ok_or(ApiError::TokenNotFound)?;
+
+        // It's safe to unwrap here, since the above find() ensures slot != None
+        let mut token = slot.as_mut().unwrap();
+        if token.pin != args.pin {
+            return Err(ApiError::AccessDenied);
+        }
+
+        // TODO: perform attestation
+        //
+        token.expiry_ts = util::time::monotonic_secs() + defs::TOKEN_EXPIRY_SECS;
 
         config.save().map_err(|_| ApiError::InternalError)?;
 

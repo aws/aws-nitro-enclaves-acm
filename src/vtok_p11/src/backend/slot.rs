@@ -43,14 +43,14 @@ impl Slot {
     }
 
     pub fn has_token(&self) -> bool {
-        self.token.is_some()
+        self.token.as_ref().filter(|tok| !tok.has_expired()).is_some()
     }
 
     pub fn token(&self) -> Option<&Token> {
-        self.token.as_ref()
+        self.token.as_ref().filter(|tok| !tok.has_expired())
     }
 
     pub fn token_mut(&mut self) -> Option<&mut Token> {
-        self.token.as_mut()
+        self.token.as_mut().filter(|tok| !tok.has_expired())
     }
 }

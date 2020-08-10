@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use vtok_common::config;
+use vtok_common::{config, util};
 
 use crate::defs;
 use crate::pkcs11;
@@ -40,6 +40,7 @@ pub struct Token {
     sessions: HashMap<pkcs11::CK_SESSION_HANDLE, Arc<Mutex<Session>>>,
     db: Option<Db>,
     user_login: bool,
+    expiry_ts: u64,
 }
 
 impl Token {
@@ -51,6 +52,7 @@ impl Token {
             sessions: HashMap::new(),
             db: Some(Db::from_token_config(token_config).map_err(Error::DbLoad)?),
             user_login: false,
+            expiry_ts: token_config.expiry_ts,
         })
     }
 
@@ -99,6 +101,10 @@ impl Token {
             firmwareVersion: defs::TOKEN_FIRMWARE_VERSION,
             utcTime: ck_padded_str!(defs::TOKEN_UTC_TIME, 16),
         }
+    }
+
+    pub fn has_expired(&self) -> bool {
+        util::time::monotonic_secs() > self.expiry_ts
     }
 
     pub fn open_session(&mut self, handle: pkcs11::CK_SESSION_HANDLE) -> Result<()> {
