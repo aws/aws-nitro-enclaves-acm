@@ -1,0 +1,15 @@
+[package]
+name = "vtok_rand"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Nitro vToken randomness seeder"
+
+[dependencies]
+nsm-driver = { path = "../nsm-driver" }
+nsm-io = { path = "../nsm-io" }
+libc = "0.2"
+
+[[bin]]
+name = "vtok-rand"
+path = "src/main.rs"
