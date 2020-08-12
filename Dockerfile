@@ -73,12 +73,20 @@ COPY . /build/vtoken
 WORKDIR /build/vtoken
 RUN RUSTFLAGS="-C target-feature=-crt-static" cargo build --release
 
+# Collect vToken random generator dependencies by parsing the ldd output
+ENV VTOK_RAND="vtok-rand"
+RUN mkdir -p /build/output/vtok_rand
+WORKDIR /build/output/vtok_rand
+RUN cp /build/vtoken/build/target/release/"$VTOK_RAND" . && \
+    ldd "$VTOK_RAND" | tr -s '[:blank:]' '\n' | grep '^/' | \
+    xargs -I % sh -c 'mkdir -p $(dirname deps%); cp % deps%;'
+
 # Collect vToken server dependencies by parsing the ldd output
 ENV VTOK_SRV="vtok-srv"
 RUN mkdir -p /build/output/vtok_srv
 WORKDIR /build/output/vtok_srv
 RUN cp /build/vtoken/build/target/release/"$VTOK_SRV" . && \
-    ldd "$VTOK_SRV" -srv | tr -s '[:blank:]' '\n' | grep '^/' | \
+    ldd "$VTOK_SRV" | tr -s '[:blank:]' '\n' | grep '^/' | \
     xargs -I % sh -c 'mkdir -p $(dirname deps%); cp % deps%;'
 
 # Collect vToken library dependencies by parsing the ldd output
@@ -106,8 +114,11 @@ RUN cp /usr/bin/"$P11_KIT" . && \
 # Create the enclave rootfs. Add the applications and store
 # the reunion of all their dependencies (since most of them are common).
 RUN mkdir /rootfs && \
+    mkdir -p /rootfs/usr/bin && mkdir -p /rootfs/usr/lib && \
     \
-    mkdir -p /rootfs/usr/bin && mkdir -p /snaphot/usr/lib && \
+    cp -R /build/output/vtok_rand/deps/* /rootfs/ && \
+    cp /build/output/vtok_rand/"$VTOK_RAND" /rootfs/usr/bin/ && \
+    \
     cp -R /build/output/vtok_srv/deps/* /rootfs/ && \
     cp /build/output/vtok_srv/"$VTOK_SRV" /rootfs/usr/bin/ && \
     \
