@@ -40,10 +40,38 @@ pub mod schema {
     }
 
     #[derive(Debug, Deserialize, Serialize)]
+    pub struct PrivateKeyDescription {
+        pub label: String,
+        pub id: u8,
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
+    pub struct TokenDescription {
+        pub label: String,
+        pub ttl_secs: u64,
+        pub keys: Option<Vec<PrivateKeyDescription>>,
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
+    pub struct DeviceDescription {
+        pub free_slot_count: usize,
+        pub tokens: Vec<TokenDescription>
+    }
+
+    #[derive(Debug, Deserialize, Serialize)]
     pub struct AddTokenArgs {
         pub token: Token,
     }
     pub type AddTokenResponse = ApiResponse<()>;
+
+    pub type DescribeDeviceResponse = ApiResponse<DeviceDescription>;
+
+    #[derive(Debug, Deserialize, Serialize)]
+    pub struct DescribeTokenArgs {
+        pub label: String,
+        pub pin: String,
+    }
+    pub type DescribeTokenResponse = ApiResponse<TokenDescription>;
 
     #[derive(Debug, Deserialize, Serialize)]
     pub struct RefreshTokenArgs {
@@ -78,6 +106,8 @@ pub mod schema {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ApiRequest {
     AddToken(schema::AddTokenArgs),
+    DescribeDevice,
+    DescribeToken(schema::DescribeTokenArgs),
     RefreshToken(schema::RefreshTokenArgs),
     RemoveToken(schema::RemoveTokenArgs),
     UpdateToken(schema::UpdateTokenArgs),
@@ -147,6 +177,11 @@ pub mod validators {
             match self {
                 Self::AddToken(args) => {
                     validate_token(&args.token)?;
+                }
+                Self::DescribeDevice => (),
+                Self::DescribeToken(args) => {
+                    validate_token_pin(args.pin.as_str())?;
+                    validate_token_label(args.label.as_str())?;
                 }
                 Self::UpdateToken(args) => {
                     validate_token_pin(args.pin.as_str())?;

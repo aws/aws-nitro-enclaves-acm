@@ -380,15 +380,9 @@ cmd_describe-device() {
         die "Invalid arguments. Please use \`$MY_NAME help\` for help."
     fi
 
-    # DescribeDevice
-    local rpc_args
-    rpc_args=$( jq -Rn \
-            '{device: "eVault"}')
-    ok_or_die "Cannot construct eVault describe device message."
-
     # Execute RPC
     local result
-    result=$(execute_rpc "$RPC_DESCRIBE_DEVICE" "$rpc_args")
+    result=$(execute_rpc "$RPC_DESCRIBE_DEVICE" "")
     echo "$result" | jq
 }
 
