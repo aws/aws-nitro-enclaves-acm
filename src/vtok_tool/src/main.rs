@@ -92,7 +92,7 @@ fn parse_server_addr(addr_str: &str) -> Result<ServerAddr, Error> {
 }
 
 fn parse_rpc_proc(proc_str: &str) -> Result<CliOption, Error> {
-    let procs = vec!["AddToken", "RefreshToken", "RemoveToken"];
+    let procs = vec!["AddToken", "DescribeDevice", "DescribeToken", "RefreshToken", "RemoveToken"];
     procs
         .iter()
         .find(|p| *p == &proc_str)
@@ -154,6 +154,24 @@ fn cmd_raw_rpc<I: Iterator<Item=String>>(mut arg_iter: I) -> Result<(), Error> {
                 transport.send_request(ApiRequest::AddToken(args))
                     .map_err(Error::TransportError)?;
                 let response: schema::AddTokenResponse = transport.recv_response()
+                    .map_err(Error::TransportError)?;
+                serde_json::to_writer(std::io::stdout(), &response)
+                    .map_err(Error::SerdeError)?;
+            }
+            "DescribeDevice" => {
+                transport.send_request(ApiRequest::DescribeDevice)
+                    .map_err(Error::TransportError)?;
+                let response: schema::DescribeDeviceResponse = transport.recv_response()
+                    .map_err(Error::TransportError)?;
+                serde_json::to_writer(std::io::stdout(), &response)
+                    .map_err(Error::SerdeError)?;
+            }
+            "DescribeToken" => {
+                let args: schema::DescribeTokenArgs = serde_json::from_reader(std::io::stdin())
+                    .map_err(|_| Error::UsageError(format!("Invalid RPC args for proc {}", proc)))?;
+                transport.send_request(ApiRequest::DescribeToken(args))
+                    .map_err(Error::TransportError)?;
+                let response: schema::DescribeTokenResponse = transport.recv_response()
                     .map_err(Error::TransportError)?;
                 serde_json::to_writer(std::io::stdout(), &response)
                     .map_err(Error::SerdeError)?;
