@@ -12,6 +12,7 @@ use std::os::unix::net::UnixListener;
 use std::time::Duration;
 
 use vtok_common::{config, defs};
+use vtok_rpc::api::schema;
 use vtok_rpc::proto::Stream;
 use vtok_rpc::HttpTransport;
 use vtok_rpc::{Listener, VsockAddr, VsockListener};
@@ -62,7 +63,7 @@ fn handle_client<S: Stream>(stream: S) -> Result<(), Error> {
         .set_write_timeout(Some(Duration::from_millis(defs::RPC_STREAM_TIMEOUT_MS)))
         .map_err(Error::IoError)?;
 
-    let xport = HttpTransport::new(stream, "/rpc/v1");
+    let xport = HttpTransport::new(stream, schema::API_URL);
     let mut worker = Worker::new(xport);
     worker.run().map_err(Error::WorkerError)
 }

@@ -3,7 +3,7 @@
 
 use vtok_common::{config, defs, util};
 use vtok_rpc::api::schema;
-use vtok_rpc::api::{ApiError, ApiRequest, ApiResponse};
+use vtok_rpc::api::schema::{ApiError, ApiRequest, ApiResponse};
 use vtok_rpc::{Transport, TransportError};
 
 #[derive(Debug)]
