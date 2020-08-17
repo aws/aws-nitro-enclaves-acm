@@ -23,7 +23,6 @@ pub struct Device {
 
 impl Device {
     pub fn new() -> Result<Self> {
-
         let config = Config::load_ro().map_err(|_| Error::GeneralError)?;
 
         let mut slots = Vec::with_capacity(defs::MAX_SLOTS);
@@ -32,8 +31,9 @@ impl Device {
                 None => Slot::new(slot_id as pkcs11::CK_SLOT_ID),
                 Some(token_config) => Slot::new_with_token(
                     slot_id as pkcs11::CK_SLOT_ID,
-                    Token::from_config(slot_id as pkcs11::CK_SLOT_ID, &token_config).map_err(Error::TokenError)?
-                )
+                    Token::from_config(slot_id as pkcs11::CK_SLOT_ID, &token_config)
+                        .map_err(Error::TokenError)?,
+                ),
             });
         }
 
