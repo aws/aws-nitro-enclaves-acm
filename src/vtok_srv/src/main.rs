@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 extern crate libc;
-extern crate vtok_rpc;
 extern crate vtok_common;
+extern crate vtok_rpc;
 
 mod worker;
 
@@ -12,11 +12,10 @@ use std::os::unix::net::UnixListener;
 use std::time::Duration;
 
 use vtok_common::{config, defs};
+use vtok_rpc::proto::Stream;
 use vtok_rpc::HttpTransport;
 use vtok_rpc::{Listener, VsockAddr, VsockListener};
-use vtok_rpc::proto::Stream;
 use worker::Worker;
-
 
 const USAGE: &str = r#"Nitro vToken database provisioning server
     Usage:
@@ -62,7 +61,6 @@ fn handle_client<S: Stream>(stream: S) -> Result<(), Error> {
     stream
         .set_write_timeout(Some(Duration::from_millis(defs::RPC_STREAM_TIMEOUT_MS)))
         .map_err(Error::IoError)?;
-
 
     let xport = HttpTransport::new(stream, "/rpc/v1");
     let mut worker = Worker::new(xport);

@@ -64,7 +64,8 @@ impl Db {
         }
 
         for key_config in token_config.private_keys.iter() {
-            let pkey = crypto::Pkey::from_private_pem(key_config.pem.as_str()).map_err(Error::PemError)?;
+            let pkey =
+                crypto::Pkey::from_private_pem(key_config.pem.as_str()).map_err(Error::PemError)?;
             match pkey.algo().map_err(Error::CryptoError)? {
                 crypto::KeyAlgo::Rsa => {
                     let info = RsaKeyInfo {
@@ -94,7 +95,7 @@ impl Db {
 
         Ok(Self {
             token_pin: token_config.pin.clone(),
-            objects
+            objects,
         })
     }
 

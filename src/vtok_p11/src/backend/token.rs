@@ -44,7 +44,6 @@ pub struct Token {
 }
 
 impl Token {
-
     pub fn from_config(slot_id: pkcs11::CK_SLOT_ID, token_config: &config::Token) -> Result<Self> {
         Ok(Self {
             slot_id,

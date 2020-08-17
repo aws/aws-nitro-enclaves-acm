@@ -70,10 +70,7 @@ impl Config {
             device.slots.push(None);
         }
 
-        serde_json::to_writer(
-            BufWriter::new(file),
-            &device
-        ).map_err(Error::SerdeError)?;
+        serde_json::to_writer(BufWriter::new(file), &device).map_err(Error::SerdeError)?;
 
         Ok(())
     }
@@ -91,7 +88,10 @@ impl Config {
     pub fn load_rw() -> Result<Self, Error> {
         let mut file = LockedFile::open_rw(defs::DEVICE_CONFIG_PATH).map_err(Error::IoError)?;
         let device = Self::load_device(file.as_mut_file())?;
-        Ok(Self { device, file: Some(file) })
+        Ok(Self {
+            device,
+            file: Some(file),
+        })
     }
 
     /// Write the config to its backing file.
@@ -114,7 +114,8 @@ impl Config {
     }
 
     fn load_device<R: Read>(src: R) -> Result<Device, Error> {
-        let mut device: Device = serde_json::from_reader(BufReader::new(src)).map_err(Error::SerdeError)?;
+        let mut device: Device =
+            serde_json::from_reader(BufReader::new(src)).map_err(Error::SerdeError)?;
         for slot in device.slots.iter_mut() {
             let expired = slot
                 .as_ref()

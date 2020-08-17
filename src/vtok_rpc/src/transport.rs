@@ -1,8 +1,8 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::io::{BufRead, BufReader, Read, Write};
 use serde::{de::DeserializeOwned, Serialize};
+use std::io::{BufRead, BufReader, Read, Write};
 
 use super::api::{ApiRequest, ApiResponse};
 

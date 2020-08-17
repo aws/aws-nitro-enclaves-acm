@@ -16,8 +16,8 @@ pub enum ApiError {
 }
 
 pub mod schema {
-    use serde::{Deserialize, Serialize};
     use super::ApiResponse;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Deserialize, Serialize)]
     pub enum EnvelopeKey {
@@ -55,7 +55,7 @@ pub mod schema {
     #[derive(Debug, Deserialize, Serialize)]
     pub struct DeviceDescription {
         pub free_slot_count: usize,
-        pub tokens: Vec<TokenDescription>
+        pub tokens: Vec<TokenDescription>,
     }
 
     #[derive(Debug, Deserialize, Serialize)]
@@ -96,7 +96,6 @@ pub mod schema {
         pub token: Token,
     }
     pub type UpdateTokenResponse = ApiResponse<()>;
-
 }
 
 /// An RPC API request, holding the API endpoint (i.e. procedure) and its input params.
@@ -121,9 +120,9 @@ pub enum ApiRequest {
 pub type ApiResponse<T> = Result<T, ApiError>;
 
 pub mod validators {
-    use std::collections::HashSet;
-    use serde::{Deserialize, Serialize};
     use super::schema;
+    use serde::{Deserialize, Serialize};
+    use std::collections::HashSet;
     use vtok_common::defs;
 
     #[derive(Debug, Deserialize, Serialize)]
