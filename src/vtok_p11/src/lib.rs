@@ -6,6 +6,7 @@ extern crate lazy_static;
 extern crate log;
 extern crate serde;
 extern crate serde_json;
+extern crate vtok_common;
 
 #[macro_use]
 mod util;
@@ -21,28 +22,32 @@ use backend::token::Error as TokenError;
 mod defs {
     use super::backend::mech::{MechDigest, Mechanism};
     use super::pkcs11;
+    use vtok_common::defs as comm_defs;
 
     pub const CRYPTOKI_VERSION: pkcs11::CK_VERSION = ck_version!(
         pkcs11::CRYPTOKI_VERSION_MAJOR as u8,
         pkcs11::CRYPTOKI_VERSION_MINOR as u8
     );
 
-    pub const DEVICE_DESCRIPTION: &str = "EncryptionVault";
+    pub const DEVICE_DESCRIPTION: &str = comm_defs::DEVICE_DESCRIPTION;
     pub const DEVICE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
-    pub const DEVICE_MANUFACTURER: &str = "Amazon";
+    pub const DEVICE_MANUFACTURER: &str = comm_defs::MANUFACTURER;
 
-    pub const SLOT_DESCRIPTION: &str = "EncryptionVault-Slot";
+    pub const SLOT_DESCRIPTION: &str = comm_defs::SLOT_DESCRIPTION;
     pub const SLOT_HARDWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const SLOT_FIRMWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
-    pub const SLOT_MANUFACTURER: &str = "Amazon";
-    pub const MAX_SLOTS: usize = 4;
+    pub const SLOT_MANUFACTURER: &str = comm_defs::MANUFACTURER;
+    pub const MAX_SLOTS: usize = comm_defs::DEVICE_MAX_SLOTS;
 
-    pub const TOKEN_MANUFACTURER: &str = "Amazon";
-    pub const TOKEN_MODEL: &str = "Nitro-vToken";
-    pub const TOKEN_MAX_SESSIONS: pkcs11::CK_ULONG = 1024;
+    pub const TOKEN_MANUFACTURER: &str = comm_defs::MANUFACTURER;
+    pub const TOKEN_MODEL: &str = comm_defs::TOKEN_MODEL;
+    pub const TOKEN_MAX_SESSIONS: pkcs11::CK_ULONG =
+        comm_defs::TOKEN_MAX_SESSIONS as pkcs11::CK_ULONG;
     pub const TOKEN_MAX_RW_SESSIONS: pkcs11::CK_ULONG = 0;
-    pub const TOKEN_MAX_PIN_LEN: pkcs11::CK_ULONG = 64;
-    pub const TOKEN_MIN_PIN_LEN: pkcs11::CK_ULONG = 4;
+    pub const TOKEN_MAX_PIN_LEN: pkcs11::CK_ULONG =
+        comm_defs::TOKEN_MIN_PIN_LEN as pkcs11::CK_ULONG;
+    pub const TOKEN_MIN_PIN_LEN: pkcs11::CK_ULONG =
+        comm_defs::TOKEN_MAX_PIN_LEN as pkcs11::CK_ULONG;
     pub const TOKEN_HARDWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const TOKEN_FIRMWARE_VERSION: pkcs11::CK_VERSION = ck_version!(0, 1);
     pub const TOKEN_UTC_TIME: &str = "";

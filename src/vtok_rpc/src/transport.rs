@@ -4,7 +4,7 @@
 use serde::{de::DeserializeOwned, Serialize};
 use std::io::{BufRead, BufReader, Read, Write};
 
-use super::api::{ApiRequest, ApiResponse};
+use super::api::schema::{ApiRequest, ApiResponse};
 
 #[derive(Debug)]
 pub enum Error {

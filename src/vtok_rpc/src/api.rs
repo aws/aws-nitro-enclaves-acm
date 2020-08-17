@@ -1,123 +1,130 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Deserialize, Serialize)]
-pub enum ApiError {
-    AccessDenied,
-    InvalidArgs(validators::Error),
-    InternalError,
-    TokenLabelInUse,
-    TokenNotFound,
-    TooManyTokens,
-    // TODO: remove this NYI error once it's not needed anymore.
-    Nyi,
-}
-
 pub mod schema {
-    use super::ApiResponse;
-    use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Deserialize, Serialize)]
-    pub enum EnvelopeKey {
-        KmsId(String),
+    pub use v1::*;
+
+    pub mod v1 {
+        use super::super::validators;
+        use serde::{Deserialize, Serialize};
+
+        /// The RPC URL used for the evault API.
+        /// Note: this can and should be used to versionize the API.
+        pub const API_URL: &str = "/rpc/v1";
+
+        /// An RPC API request, holding the API endpoint (i.e. procedure) and its input params.
+        ///
+        /// This type will provide serialization (and deserialization) facilities, so that it can be
+        /// sent over an RPC transport.
+        #[derive(Debug, Deserialize, Serialize)]
+        pub enum ApiRequest {
+            AddToken(AddTokenArgs),
+            DescribeDevice,
+            DescribeToken(DescribeTokenArgs),
+            RefreshToken(RefreshTokenArgs),
+            RemoveToken(RemoveTokenArgs),
+            UpdateToken(UpdateTokenArgs),
+        }
+
+        /// An RPC API response, holding the result type for every API endpoint described by
+        /// `ApiRequest`.
+        ///
+        /// This type will provide serialization (and deserialization) facilities, so that it can be
+        /// sent over an RPC transport.
+        pub type ApiResponse<T> = Result<T, ApiError>;
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub enum ApiError {
+            AccessDenied,
+            InvalidArgs(validators::Error),
+            InternalError,
+            TokenLabelInUse,
+            TokenNotFound,
+            TooManyTokens,
+            // TODO: remove this NYI error once it's not needed anymore.
+            Nyi,
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub enum EnvelopeKey {
+            KmsId(String),
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct PrivateKey {
+            pub encrypted_pem: String,
+            pub id: u8,
+            pub label: String,
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct Token {
+            pub label: String,
+            pub pin: String,
+            pub envelope_key: EnvelopeKey,
+            pub keys: Vec<PrivateKey>,
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct PrivateKeyDescription {
+            pub label: String,
+            pub id: u8,
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct TokenDescription {
+            pub label: String,
+            pub ttl_secs: u64,
+            pub keys: Option<Vec<PrivateKeyDescription>>,
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct DeviceDescription {
+            pub free_slot_count: usize,
+            pub tokens: Vec<TokenDescription>,
+        }
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct AddTokenArgs {
+            pub token: Token,
+        }
+        pub type AddTokenResponse = ApiResponse<()>;
+
+        pub type DescribeDeviceResponse = ApiResponse<DeviceDescription>;
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct DescribeTokenArgs {
+            pub label: String,
+            pub pin: String,
+        }
+        pub type DescribeTokenResponse = ApiResponse<TokenDescription>;
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct RefreshTokenArgs {
+            pub label: String,
+            pub pin: String,
+            pub aws_id: String,
+            pub aws_secret: String,
+        }
+        pub type RefreshTokenResponse = ApiResponse<()>;
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct RemoveTokenArgs {
+            pub label: String,
+            pub pin: String,
+        }
+        pub type RemoveTokenResponse = ApiResponse<()>;
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub struct UpdateTokenArgs {
+            pub label: String,
+            pub pin: String,
+            pub token: Token,
+        }
+        pub type UpdateTokenResponse = ApiResponse<()>;
     }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct PrivateKey {
-        pub encrypted_pem: String,
-        pub id: u8,
-        pub label: String,
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct Token {
-        pub label: String,
-        pub pin: String,
-        pub envelope_key: EnvelopeKey,
-        pub keys: Vec<PrivateKey>,
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct PrivateKeyDescription {
-        pub label: String,
-        pub id: u8,
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct TokenDescription {
-        pub label: String,
-        pub ttl_secs: u64,
-        pub keys: Option<Vec<PrivateKeyDescription>>,
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct DeviceDescription {
-        pub free_slot_count: usize,
-        pub tokens: Vec<TokenDescription>,
-    }
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct AddTokenArgs {
-        pub token: Token,
-    }
-    pub type AddTokenResponse = ApiResponse<()>;
-
-    pub type DescribeDeviceResponse = ApiResponse<DeviceDescription>;
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct DescribeTokenArgs {
-        pub label: String,
-        pub pin: String,
-    }
-    pub type DescribeTokenResponse = ApiResponse<TokenDescription>;
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct RefreshTokenArgs {
-        pub label: String,
-        pub pin: String,
-        pub aws_id: String,
-        pub aws_secret: String,
-    }
-    pub type RefreshTokenResponse = ApiResponse<()>;
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct RemoveTokenArgs {
-        pub label: String,
-        pub pin: String,
-    }
-    pub type RemoveTokenResponse = ApiResponse<()>;
-
-    #[derive(Debug, Deserialize, Serialize)]
-    pub struct UpdateTokenArgs {
-        pub label: String,
-        pub pin: String,
-        pub token: Token,
-    }
-    pub type UpdateTokenResponse = ApiResponse<()>;
 }
-
-/// An RPC API request, holding the API endpoint (i.e. procedure) and its input params.
-///
-/// This type will provide serialization (and deserialization) facilities, so that it can be
-/// sent over an RPC transport.
-#[derive(Debug, Deserialize, Serialize)]
-pub enum ApiRequest {
-    AddToken(schema::AddTokenArgs),
-    DescribeDevice,
-    DescribeToken(schema::DescribeTokenArgs),
-    RefreshToken(schema::RefreshTokenArgs),
-    RemoveToken(schema::RemoveTokenArgs),
-    UpdateToken(schema::UpdateTokenArgs),
-}
-
-/// An RPC API response, holding the result type for every API endpoint described by
-/// `ApiRequest`.
-///
-/// This type will provide serialization (and deserialization) facilities, so that it can be
-/// sent over an RPC transport.
-pub type ApiResponse<T> = Result<T, ApiError>;
 
 pub mod validators {
     use super::schema;
@@ -171,7 +178,7 @@ pub mod validators {
         Ok(())
     }
 
-    impl super::ApiRequest {
+    impl schema::ApiRequest {
         pub fn validate_args(&self) -> Result<(), Error> {
             match self {
                 Self::AddToken(args) => {

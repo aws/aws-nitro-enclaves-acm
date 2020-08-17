@@ -10,7 +10,7 @@ use std::fmt;
 use std::os::unix::net::UnixStream;
 
 use vtok_rpc::api::schema;
-use vtok_rpc::ApiRequest;
+use vtok_rpc::api::schema::ApiRequest;
 use vtok_rpc::{HttpTransport, Transport};
 use vtok_rpc::{VsockAddr, VsockStream};
 
@@ -227,11 +227,11 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
     match server_addr {
         ServerAddr::Unix(path) => UnixStream::connect(path)
             .map_err(Error::IoError)
-            .map(|stream| HttpTransport::new(stream, "/rpc/v1"))
+            .map(|stream| HttpTransport::new(stream, schema::API_URL))
             .and_then(|xport| do_raw_rpc(xport, proc_name)),
         ServerAddr::Vsock(addr) => VsockStream::connect(*addr)
             .map_err(Error::IoError)
-            .map(|stream| HttpTransport::new(stream, "/rpc/v1"))
+            .map(|stream| HttpTransport::new(stream, schema::API_URL))
             .and_then(|xport| do_raw_rpc(xport, proc_name)),
     }
 }
