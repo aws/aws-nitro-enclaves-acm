@@ -1,6 +1,6 @@
 [workspace]
-members = [ "src/vtok_p11", "src/vtok_rpc", "src/vtok_rand", "src/vtok_srv", "src/vtok_tool", "tests/helpers", "src/nsm-driver", "src/nsm-io"]
-default-members = ["src/vtok_p11", "src/vtok_rpc", "src/vtok_rand", "src/vtok_srv", "src/vtok_tool", "src/nsm-driver", "src/nsm-io"]
+members = [ "src/vtok_p11", "src/vtok_rpc", "src/vtok_rand", "src/vtok_srv", "src/vtok_tool", "tests/helpers"]
+default-members = ["src/vtok_p11", "src/vtok_rpc", "src/vtok_rand", "src/vtok_srv", "src/vtok_tool"]
 
 [profile.release]
 lto = true
