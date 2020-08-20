@@ -121,16 +121,9 @@ RUN cd /build/aws-nitro-enclaves-nsm-api && \
         RUSTFLAGS="-C target-feature=-crt-static" cargo build --release && \
         mv target/release/"$NSM_LIB" /usr/lib && \
         mv src/nsm-lib/nsm-lib.h /usr/include
-
-# Bring in the source files
-COPY . /build/sources
-
 # AWS Nitro Enclaves SDK
-# TODO: Fetch from github
 ENV AWS_NE_SDK="libaws-nitro-enclaves-sdk-c.so.0unstable"
-WORKDIR /build
-RUN mv /build/sources/deps/aws-nitro-enclaves-sdk-c /build/aws-nitro-enclaves-sdk-c
-
+RUN git clone https://$USER:$TOKEN@github.com/aws/aws-nitro-enclaves-sdk-c
 # Build the SDK against /usr/lib
 RUN cp /usr/lib64/"$AWS_C_COMMON_LIB" \
     /usr/lib64/"$JSON_LIB" \
@@ -144,6 +137,9 @@ RUN cp /usr/lib64/"$AWS_C_COMMON_LIB" \
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 \
     -S aws-nitro-enclaves-sdk-c -B aws-nitro-enclaves-sdk-c/build
 RUN cmake --build aws-nitro-enclaves-sdk-c/build --verbose --target install && cp /usr/lib64/"$AWS_NE_SDK" /usr/lib/
+
+# Bring in the eVault source files
+COPY . /build/sources
 
 # Build the vToken p11 provider library and applications
 WORKDIR /build/sources
