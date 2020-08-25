@@ -19,12 +19,84 @@ pub mod schema {
         /// sent over an RPC transport.
         #[derive(Debug, Deserialize, Serialize)]
         pub enum ApiRequest {
-            AddToken(AddTokenArgs),
+            /// Add a new token. The new token will be inserted into the first free slot.
+            ///
+            /// Returns:
+            /// - `ApiOk::None` on success;
+            /// - `ApiError::TooManyTokens` if there are no more free slots left;
+            /// - `ApiError::TokenLabelInUse` if the token label is already being used by
+            ///    another token;
+            /// - `ApiError::{InvalidArgs, InternalError}`.
+            AddToken {
+                /// The parameters of the new token.
+                token: Token
+            },
+
+            /// Get a high-level description of the evault device, including active tokens
+            /// and the current number of free slots.
+            ///
+            /// Returns:
+            /// - `ApiOk::DeviceDescription` on success;
+            /// - `ApiError::InternalError`.
+            ///
             DescribeDevice,
-            DescribeToken(DescribeTokenArgs),
-            RefreshToken(RefreshTokenArgs),
-            RemoveToken(RemoveTokenArgs),
-            UpdateToken(UpdateTokenArgs),
+
+            /// Get a detailed description of a specific token.
+            /// The caller will need to provide the correct PIN in order to access the token.
+            ///
+            /// Returns:
+            /// - `ApiOk::TokenDescription` on success;
+            /// - `ApiError::AccessDenied` if the incorrect PIN is supplied;
+            /// - `ApiError::TokenNotFound` if the supplied label doesn't match any active token;
+            /// - `ApiError::InternalError`.
+            DescribeToken {
+                /// Label identified the token to describe.
+                label: String,
+                /// The PIN granting access to the token to describe.
+                pin: String,
+            },
+
+            /// Refresh a specific token, by going through the attestation process again, using the
+            /// newly supplied credentials.
+            ///
+            /// Returns:
+            /// - `ApiOk::None` on success;
+            /// - `ApiError::AccessDenied` if the incorrect PIN is supplied;
+            /// - `ApiError::TokenNotFound` if the supplied label doesn't match any active token;
+            /// - `ApiError::{InvalidArgs, InternalError}`.
+            RefreshToken {
+                /// Label of the token to be refreshed.
+                label: String,
+                /// The PIN granting access to the token identified by `label`.
+                pin: String,
+                /// AWS credentials: AWS_KEY_ID.
+                aws_id: String,
+                /// AWS credentials: AWS_SECRET_KEY_ID.
+                aws_secret: String,
+            },
+
+            /// Remove a specific token from the evault device.
+            ///
+            /// Returns:
+            /// - `ApiOk::None` on success;
+            /// - `ApiError::TokenNotFound` if the supplied label doesn't match any active token;
+            /// - `ApiError::AccessDenied` if the incorect PIN is supplied;
+            /// - `ApiError::InternalError`.
+            RemoveToken {
+                /// Label of the token to remove.
+                label: String,
+                /// The PIN granting access to the target token.
+                pin: String,
+            },
+
+            /// Update a specific token in-place.
+            ///
+            /// NYI
+            UpdateToken {
+                label: String,
+                pin: String,
+                token: Token,
+            },
         }
 
         /// An RPC API response, holding the result type for every API endpoint described by
@@ -32,7 +104,14 @@ pub mod schema {
         ///
         /// This type will provide serialization (and deserialization) facilities, so that it can be
         /// sent over an RPC transport.
-        pub type ApiResponse<T> = Result<T, ApiError>;
+        pub type ApiResponse = std::result::Result<ApiOk, ApiError>;
+
+        #[derive(Debug, Deserialize, Serialize)]
+        pub enum ApiOk {
+            None,
+            DeviceDescription(DeviceDescription),
+            TokenDescription(TokenDescription),
+        }
 
         #[derive(Debug, Deserialize, Serialize)]
         pub enum ApiError {
@@ -48,7 +127,7 @@ pub mod schema {
 
         #[derive(Debug, Deserialize, Serialize)]
         pub enum EnvelopeKey {
-            KmsId(String),
+            Kms(String),
         }
 
         #[derive(Debug, Deserialize, Serialize)]
@@ -84,45 +163,6 @@ pub mod schema {
             pub free_slot_count: usize,
             pub tokens: Vec<TokenDescription>,
         }
-
-        #[derive(Debug, Deserialize, Serialize)]
-        pub struct AddTokenArgs {
-            pub token: Token,
-        }
-        pub type AddTokenResponse = ApiResponse<()>;
-
-        pub type DescribeDeviceResponse = ApiResponse<DeviceDescription>;
-
-        #[derive(Debug, Deserialize, Serialize)]
-        pub struct DescribeTokenArgs {
-            pub label: String,
-            pub pin: String,
-        }
-        pub type DescribeTokenResponse = ApiResponse<TokenDescription>;
-
-        #[derive(Debug, Deserialize, Serialize)]
-        pub struct RefreshTokenArgs {
-            pub label: String,
-            pub pin: String,
-            pub aws_id: String,
-            pub aws_secret: String,
-        }
-        pub type RefreshTokenResponse = ApiResponse<()>;
-
-        #[derive(Debug, Deserialize, Serialize)]
-        pub struct RemoveTokenArgs {
-            pub label: String,
-            pub pin: String,
-        }
-        pub type RemoveTokenResponse = ApiResponse<()>;
-
-        #[derive(Debug, Deserialize, Serialize)]
-        pub struct UpdateTokenArgs {
-            pub label: String,
-            pub pin: String,
-            pub token: Token,
-        }
-        pub type UpdateTokenResponse = ApiResponse<()>;
     }
 }
 
@@ -181,26 +221,26 @@ pub mod validators {
     impl schema::ApiRequest {
         pub fn validate_args(&self) -> Result<(), Error> {
             match self {
-                Self::AddToken(args) => {
-                    validate_token(&args.token)?;
+                Self::AddToken { token } => {
+                    validate_token(&token)?;
                 }
                 Self::DescribeDevice => (),
-                Self::DescribeToken(args) => {
-                    validate_token_pin(args.pin.as_str())?;
-                    validate_token_label(args.label.as_str())?;
+                Self::DescribeToken { label, pin } => {
+                    validate_token_pin(pin.as_str())?;
+                    validate_token_label(label.as_str())?;
                 }
-                Self::UpdateToken(args) => {
-                    validate_token_pin(args.pin.as_str())?;
-                    validate_token_label(args.label.as_str())?;
-                    validate_token(&args.token)?;
+                Self::UpdateToken { label, pin, token } => {
+                    validate_token_pin(pin.as_str())?;
+                    validate_token_label(label.as_str())?;
+                    validate_token(&token)?;
                 }
-                Self::RefreshToken(args) => {
-                    validate_token_pin(args.pin.as_str())?;
-                    validate_token_label(args.label.as_str())?;
+                Self::RefreshToken { label, pin, .. } => {
+                    validate_token_pin(pin.as_str())?;
+                    validate_token_label(label.as_str())?;
                 }
-                Self::RemoveToken(args) => {
-                    validate_token_pin(args.pin.as_str())?;
-                    validate_token_label(args.label.as_str())?;
+                Self::RemoveToken { label, pin } => {
+                    validate_token_pin(pin.as_str())?;
+                    validate_token_label(label.as_str())?;
                 }
             }
             Ok(())

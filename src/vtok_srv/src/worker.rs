@@ -3,7 +3,7 @@
 
 use vtok_common::{config, defs, util};
 use vtok_rpc::api::schema;
-use vtok_rpc::api::schema::{ApiError, ApiRequest, ApiResponse};
+use vtok_rpc::api::schema::{ApiError, ApiRequest, ApiResponse, ApiOk};
 use vtok_rpc::{Transport, TransportError};
 
 #[derive(Debug)]
@@ -24,35 +24,34 @@ where
     }
 
     pub fn run(&mut self) -> Result<(), Error> {
-        macro_rules! respond {
-            ($response:expr) => {{
-                self.transport
-                    .send_response($response)
-                    .map_err(Error::TransportError)
-            }};
-        }
-
         let request = self
             .transport
             .recv_request()
             .map_err(Error::TransportError)?;
 
-        request
+        let response = request
             .validate_args()
-            .or_else(|e| respond!(ApiResponse::<()>::Err(ApiError::InvalidArgs(e))))
+            .map_err(ApiError::InvalidArgs)
             .and_then(|_| match request {
-                ApiRequest::AddToken(args) => respond!(Self::add_token(args)),
-                ApiRequest::DescribeDevice => respond!(Self::describe_device()),
-                ApiRequest::DescribeToken(args) => respond!(Self::describe_token(args)),
-                ApiRequest::RefreshToken(args) => respond!(Self::refresh_token(args)),
-                ApiRequest::RemoveToken(args) => respond!(Self::remove_token(args)),
-                ApiRequest::UpdateToken(_args) => {
-                    respond!(schema::UpdateTokenResponse::Err(ApiError::Nyi))
+                ApiRequest::AddToken { token } => Self::add_token(token),
+                ApiRequest::DescribeDevice => Self::describe_device(),
+                ApiRequest::DescribeToken { label, pin } => Self::describe_token(label, pin),
+                ApiRequest::RefreshToken { label, pin, aws_id, aws_secret } => {
+                    Self::refresh_token(label, pin, aws_id, aws_secret)
+                },
+                ApiRequest::RemoveToken {label, pin } => Self::remove_token(label, pin),
+                ApiRequest::UpdateToken { .. } => {
+                    Err(ApiError::Nyi)
                 }
-            })
+            });
+
+        self
+            .transport
+            .send_response(response)
+            .map_err(Error::TransportError)
     }
 
-    fn add_token(args: schema::AddTokenArgs) -> schema::AddTokenResponse {
+    fn add_token(token: schema::Token) -> ApiResponse {
         let mut config = config::Config::load_rw().map_err(|_| ApiError::InternalError)?;
 
         // Check if the token label is already in use by another token.
@@ -61,7 +60,7 @@ where
             .iter()
             .filter(|s| match s {
                 None => false,
-                Some(tok) => tok.label == args.token.label,
+                Some(tok) => tok.label == token.label,
             })
             .count();
         if dup > 0 {
@@ -75,8 +74,7 @@ where
             .find(|s| s.is_none())
             .ok_or(ApiError::TooManyTokens)?;
 
-        let private_keys = args
-            .token
+        let private_keys = token
             .keys
             .iter()
             .map(|key| {
@@ -90,18 +88,18 @@ where
             .collect();
 
         free_slot.replace(config::Token {
-            label: args.token.label,
-            pin: args.token.pin,
+            label: token.label,
+            pin: token.pin,
             private_keys,
             expiry_ts: util::time::monotonic_secs() + defs::TOKEN_EXPIRY_SECS,
         });
 
         config.save().map_err(|_| ApiError::InternalError)?;
 
-        Ok(())
+        Ok(ApiOk::None)
     }
 
-    fn describe_device() -> schema::DescribeDeviceResponse {
+    fn describe_device() -> ApiResponse {
         let config = config::Config::load_ro().map_err(|_| ApiError::InternalError)?;
         let tokens: Vec<schema::TokenDescription> = config
             .slots()
@@ -117,24 +115,26 @@ where
             })
             .collect();
         let free_slot_count = defs::DEVICE_MAX_SLOTS - tokens.len();
-        Ok(schema::DeviceDescription {
+
+        Ok(ApiOk::DeviceDescription(schema::DeviceDescription {
             free_slot_count,
             tokens,
-        })
+        }))
     }
 
-    fn describe_token(args: schema::DescribeTokenArgs) -> schema::DescribeTokenResponse {
+    fn describe_token(label: String, pin: String) -> ApiResponse {
         let config = config::Config::load_ro().map_err(|_| ApiError::InternalError)?;
         let token = config
             .slots()
             .iter()
-            .filter_map(|slot| slot.as_ref().filter(|tok| tok.label == args.label))
+            .filter_map(|slot| slot.as_ref().filter(|tok| tok.label == label))
             .next()
             .ok_or(ApiError::TokenNotFound)?;
-        if token.pin != args.pin {
+        if token.pin != pin {
             return Err(ApiError::AccessDenied);
         }
-        Ok(schema::TokenDescription {
+
+        let token_desc = schema::TokenDescription {
             label: token.label.clone(),
             ttl_secs: token
                 .expiry_ts
@@ -150,23 +150,25 @@ where
                     })
                     .collect(),
             ),
-        })
+        };
+
+        Ok(ApiOk::TokenDescription(token_desc))
     }
 
-    fn refresh_token(args: schema::RefreshTokenArgs) -> schema::RefreshTokenResponse {
+    fn refresh_token(label: String, pin: String, _aws_id: String, _aws_secret: String) -> ApiResponse {
         let mut config = config::Config::load_rw().map_err(|_| ApiError::InternalError)?;
         let slot = config
             .slots_mut()
             .iter_mut()
             .find(|s| match s {
                 None => false,
-                Some(tok) => tok.label == args.label,
+                Some(tok) => tok.label == label,
             })
             .ok_or(ApiError::TokenNotFound)?;
 
         // It's safe to unwrap here, since the above find() ensures slot != None
         let mut token = slot.as_mut().unwrap();
-        if token.pin != args.pin {
+        if token.pin != pin {
             return Err(ApiError::AccessDenied);
         }
 
@@ -176,21 +178,21 @@ where
 
         config.save().map_err(|_| ApiError::InternalError)?;
 
-        Ok(())
+        Ok(ApiOk::None)
     }
 
-    fn remove_token(args: schema::RemoveTokenArgs) -> schema::RemoveTokenResponse {
+    fn remove_token(label: String, pin: String) -> ApiResponse {
         let mut config = config::Config::load_rw().map_err(|_| ApiError::InternalError)?;
         let slot = config
             .slots_mut()
             .iter_mut()
             .find(|s| match s {
                 None => false,
-                Some(tok) => tok.label == args.label,
+                Some(tok) => tok.label == label,
             })
             .ok_or(ApiError::TokenNotFound)?;
         if let Some(tok) = slot {
-            if tok.pin != args.pin {
+            if tok.pin != pin {
                 return Err(ApiError::AccessDenied);
             }
         }
@@ -198,6 +200,6 @@ where
 
         config.save().map_err(|_| ApiError::InternalError)?;
 
-        Ok(())
+        Ok(ApiOk::None)
     }
 }
