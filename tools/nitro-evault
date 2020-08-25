@@ -20,14 +20,6 @@ P11KIT_SERVER_PORT="9999"
 DEFAULT_CPUS="2"
 DEFAULT_MEMORY="256"
 
-# RPCs
-RPC_ADD_TOKEN="AddToken"
-RPC_REMOVE_TOKEN="RemoveToken"
-RPC_UPDATE_TOKEN="UpdateToken"
-RPC_REFRESH_TOKEN="RefreshToken"
-RPC_DESCRIBE_DEVICE="DescribeDevice"
-RPC_DESCRIBE_TOKEN="DescribeToken"
-
 USAGE="\
 $MY_NAME v$MY_VERSION - $MY_DESC
 Usage: $(basename "$0") <command> [arguments]
@@ -160,7 +152,7 @@ nitro_cli_config() {
 cmd_start() {
     ensure_nitro_cli
     ensure_image_installed
-    
+
     if [ "$#" -eq 4 ]; then
         while [[ "$#" -gt 0 ]]; do
         case $1 in
@@ -187,7 +179,7 @@ cmd_start() {
 
     # Configure the nitro-cli environment
     nitro_cli_config "$cpu_count" "$memory"
-    
+
     # Spawn the eVault enclave
     local eif_path
     eif_path=$(get_image_path)
@@ -225,12 +217,11 @@ cmd_stop() {
 # Issue a RPC call
 #
 execute_rpc() {
-    if [ "$#" -ne 2 ]; then
+    if [ "$#" -ne 1 ]; then
         die "Bad execute_rpc() call."
     fi
 
-    local rpc_opcode="$1"
-    local rpc_args="$2"
+    local rpc_request="$1"
 
     # Construct the server address
     if test -S "$AF_UNIX_RPC_FILE"; then
@@ -247,7 +238,7 @@ execute_rpc() {
 
     # Execute the RPC
     local result
-    result=$(echo "$rpc_args" | "$NITRO_VTOKEN" raw-rpc --server "$server_path" --proc "$rpc_opcode")
+    result=$(echo "$rpc_request" | "$NITRO_VTOKEN" raw-rpc --server "$server_path")
     echo "$result"
 }
 
@@ -287,19 +278,19 @@ cmd_init-token() {
                 '{KmsId : "n/a"}')
     ok_or_die "Cannot construct KmsId credentials."
 
-    # AddTokenArgs #TODO: Use aws_id and aws_secret
-    local rpc_args
-    rpc_args=$( jq -Rn \
+    # AddToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
             --arg a "$label" \
             --arg b "$pin" \
             --argjson c "$envelope_key" \
             --argjson d "$keys" \
-            '{ token: {label: $a, pin: $b, envelope_key: $c, keys: [ $d ]}}')
+            '{AddToken: {token: {label: $a, pin: $b, envelope_key: $c, keys: [ $d ]}}}')
     ok_or_die "Cannot construct eVault token initialization message."
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$RPC_ADD_TOKEN" "$rpc_args")
+    result=$(execute_rpc "$rpc_request")
     echo "$result" | jq
 }
 
@@ -323,19 +314,19 @@ cmd_refresh-token() {
         shift
     done
 
-    # RefreshToken
-    local rpc_args
-    rpc_args=$( jq -Rn \
+    # RefreshToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
             --arg a "$label" \
             --arg b "$pin" \
             --arg c "$aws_id" \
             --arg d "$aws_secret" \
-            '{label: $a, pin: $b, aws_id: $c, aws_secret: $d}')
+            '{RefreshToken: {label: $a, pin: $b, aws_id: $c, aws_secret: $d}}')
     ok_or_die "Cannot construct eVault token refresh message."
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$RPC_REFRESH_TOKEN" "$rpc_args")
+    result=$(execute_rpc "$rpc_args")
     echo "$result" | jq
 }
 
@@ -357,17 +348,17 @@ cmd_release-token() {
         shift
     done
 
-    # RemoveTokenArgs
-    local rpc_args
-    rpc_args=$( jq -Rn \
+    # RemoveToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
             --arg a "$label" \
             --arg b "$pin" \
-            '{label: $a, pin: $b}')
+            '{RemoveToken: {label: $a, pin: $b}}')
     ok_or_die "Cannot construct eVault token release message."
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$RPC_REMOVE_TOKEN" "$rpc_args")
+    result=$(execute_rpc "$rpc_args")
     echo "$result" | jq
 }
 
@@ -382,7 +373,7 @@ cmd_describe-device() {
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$RPC_DESCRIBE_DEVICE" "")
+    result=$(execute_rpc "{\"DescribeDevice\": null}")
     echo "$result" | jq
 }
 
@@ -404,17 +395,17 @@ cmd_describe-token() {
         shift
     done
 
-    # DescribeTokenArgs
-    local rpc_args
-    rpc_args=$( jq -Rn \
+    # DescribeToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
             --arg a "$label" \
             --arg b "$pin" \
-            '{label: $a, pin: $b}')
+            '{DescribeToken: {label: $a, pin: $b}}')
     ok_or_die "Cannot construct eVault describe token message."
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$RPC_DESCRIBE_TOKEN" "$rpc_args")
+    result=$(execute_rpc "$rpc_args")
     echo "$result" | jq
 }
 
