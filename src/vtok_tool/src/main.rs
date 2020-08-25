@@ -10,7 +10,6 @@ use std::fmt;
 use std::os::unix::net::UnixStream;
 
 use vtok_rpc::api::schema;
-use vtok_rpc::api::schema::ApiRequest;
 use vtok_rpc::{HttpTransport, Transport};
 use vtok_rpc::{VsockAddr, VsockStream};
 
@@ -31,18 +30,12 @@ const USAGE: &str = r#"Nitro vToken Tool
 
     Commands:
 
-        raw-rpc --proc <procedure name>
+        raw-rpc
             Perform a raw remote procedure call. This provides a low-level interface
             to the eVault RPC server.
-            There are three pieces of information needed to perform a remote procedure call:
-            the procedure name, the procedure parameters, and the procedure result.
-            The procedure name is given by the --proc option, the parameters are read from
-            STDIN, as JSON data, and the result is written to STDOUT, similarly, as JSON data.
-            Options:
-                --proc <procedure name>
-                    [REQUIRED]
-                    The RPC procedure name. See the docs for a full schema description of the
-                    RPC protocol used by eVault.
+            A raw (json-serialized) API request is read from STDIN, sent to the evault
+            RPC server, and the response is written to STDOUT, also in its raw,
+            json-serialized form.
 
         help
             Show this usage message.
@@ -54,6 +47,16 @@ enum Error {
     UsageError(String),
     SerdeError(serde_json::Error),
 }
+
+enum ServerAddr {
+    Vsock(VsockAddr),
+    Unix(String),
+}
+
+enum CliOption {
+    Server(ServerAddr),
+}
+
 
 impl From<Error> for i32 {
     fn from(_other: Error) -> i32 {
@@ -98,31 +101,6 @@ fn parse_server_addr(addr_str: &str) -> Result<ServerAddr, Error> {
     }
 }
 
-fn parse_rpc_proc(proc_str: &str) -> Result<CliOption, Error> {
-    let procs = vec![
-        "AddToken",
-        "DescribeDevice",
-        "DescribeToken",
-        "RefreshToken",
-        "RemoveToken",
-    ];
-    procs
-        .iter()
-        .find(|p| *p == &proc_str)
-        .ok_or(Error::UsageError(format!("invalid RPC proc: {}", proc_str)))
-        .map(|p| CliOption::Proc(p.to_string()))
-}
-
-enum ServerAddr {
-    Vsock(VsockAddr),
-    Unix(String),
-}
-
-enum CliOption {
-    Server(ServerAddr),
-    Proc(String),
-}
-
 fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error> {
     let mut cli_opts = HashMap::new();
 
@@ -135,13 +113,6 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
                     .and_then(|addr| parse_server_addr(addr.as_str()))?;
                 cli_opts.insert(word, CliOption::Server(addr));
             }
-            "--proc" => {
-                let opt = arg_iter
-                    .next()
-                    .ok_or(Error::UsageError(format!("invalid RPC proc")))
-                    .and_then(|p| parse_rpc_proc(p.as_str()))?;
-                cli_opts.insert(word, opt);
-            }
             _ => return Err(Error::UsageError(format!("unexpected argument: {}", word))),
         }
     }
@@ -151,76 +122,19 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
         _ => return Err(Error::UsageError(format!("missing server address"))),
     };
 
-    let proc_name = match cli_opts.get("--proc") {
-        Some(CliOption::Proc(name)) => name,
-        _ => return Err(Error::UsageError(format!("missing RPC procedure"))),
-    };
+    fn do_raw_rpc<T: Transport>(mut transport: T) -> Result<(), Error> {
+        let request = serde_json::from_reader(std::io::stdin())
+            .map_err(|_| Error::UsageError(format!("Invalid RPC request")))?;
+        transport
+            .send_request(request)
+            .map_err(Error::TransportError)?;
+        let response = transport
+            .recv_response()
+            .map_err(Error::TransportError)?;
 
-    fn do_raw_rpc<T: Transport>(mut transport: T, proc: &str) -> Result<(), Error> {
-        match proc {
-            "AddToken" => {
-                let args: schema::AddTokenArgs = serde_json::from_reader(std::io::stdin())
-                    .map_err(|_| {
-                        Error::UsageError(format!("Invalid RPC args for proc {}", proc))
-                    })?;
-                transport
-                    .send_request(ApiRequest::AddToken(args))
-                    .map_err(Error::TransportError)?;
-                let response: schema::AddTokenResponse =
-                    transport.recv_response().map_err(Error::TransportError)?;
-                serde_json::to_writer(std::io::stdout(), &response).map_err(Error::SerdeError)?;
-            }
-            "DescribeDevice" => {
-                transport
-                    .send_request(ApiRequest::DescribeDevice)
-                    .map_err(Error::TransportError)?;
-                let response: schema::DescribeDeviceResponse =
-                    transport.recv_response().map_err(Error::TransportError)?;
-                serde_json::to_writer(std::io::stdout(), &response).map_err(Error::SerdeError)?;
-            }
-            "DescribeToken" => {
-                let args: schema::DescribeTokenArgs = serde_json::from_reader(std::io::stdin())
-                    .map_err(|_| {
-                        Error::UsageError(format!("Invalid RPC args for proc {}", proc))
-                    })?;
-                transport
-                    .send_request(ApiRequest::DescribeToken(args))
-                    .map_err(Error::TransportError)?;
-                let response: schema::DescribeTokenResponse =
-                    transport.recv_response().map_err(Error::TransportError)?;
-                serde_json::to_writer(std::io::stdout(), &response).map_err(Error::SerdeError)?;
-            }
-            "RefreshToken" => {
-                let args: schema::RefreshTokenArgs = serde_json::from_reader(std::io::stdin())
-                    .map_err(|_| {
-                        Error::UsageError(format!("Invalid RPC args for proc {}", proc))
-                    })?;
-                transport
-                    .send_request(ApiRequest::RefreshToken(args))
-                    .map_err(Error::TransportError)?;
-                let response: schema::RefreshTokenResponse =
-                    transport.recv_response().map_err(Error::TransportError)?;
-                serde_json::to_writer(std::io::stdout(), &response).map_err(Error::SerdeError)?;
-            }
-            "RemoveToken" => {
-                let args: schema::RemoveTokenArgs = serde_json::from_reader(std::io::stdin())
-                    .map_err(|_| {
-                        Error::UsageError(format!("Invalid RPC args for proc {}", proc))
-                    })?;
-                transport
-                    .send_request(ApiRequest::RemoveToken(args))
-                    .map_err(Error::TransportError)?;
-                let response: schema::RemoveTokenResponse =
-                    transport.recv_response().map_err(Error::TransportError)?;
-                serde_json::to_writer(std::io::stdout(), &response).map_err(Error::SerdeError)?;
-            }
-            _ => {
-                return Err(Error::UsageError(format!(
-                    "unknown RPC procedure: {}",
-                    proc
-                )))
-            }
-        }
+        serde_json::to_writer(std::io::stdout(), &response)
+            .map_err(Error::SerdeError)?;
+
         Ok(())
     }
 
@@ -228,16 +142,16 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
         ServerAddr::Unix(path) => UnixStream::connect(path)
             .map_err(Error::IoError)
             .map(|stream| HttpTransport::new(stream, schema::API_URL))
-            .and_then(|xport| do_raw_rpc(xport, proc_name)),
+            .and_then(|xport| do_raw_rpc(xport)),
         ServerAddr::Vsock(addr) => VsockStream::connect(*addr)
             .map_err(Error::IoError)
             .map(|stream| HttpTransport::new(stream, schema::API_URL))
-            .and_then(|xport| do_raw_rpc(xport, proc_name)),
+            .and_then(|xport| do_raw_rpc(xport)),
     }
 }
 
 /// Parameters:
-/// AF_VSOCK: <nitro-vtoken> "vsock" "16" "10000"
+/// AF_VSOCK: <nitro-vtoken> "vsock" "10000"
 /// AF_UNIX:  <nitro-vtoken> "unix" "some/path"
 fn rusty_main() -> Result<(), Error> {
     let mut args = std::env::args();
