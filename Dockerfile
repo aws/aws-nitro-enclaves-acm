@@ -53,7 +53,7 @@ WORKDIR /build
 RUN git clone -b master "$AWS_LCRYPTO" aws-lc \
     && cd aws-lc \
     && cmake -DBUILD_SHARED_LIBS=1 . \
-    && make crypto \
+    && make -j $(nproc) crypto \
     && mv third_party/boringssl/crypto/libcrypto.so /usr/lib/libcrypto.so \
     && mv third_party/boringssl/include/openssl /usr/include \
     && ldconfig /usr/lib \
@@ -68,7 +68,7 @@ RUN tar xf 0.23.19.tar.gz && \
     ./autogen.sh && \
     ./configure --disable-debug --prefix=/usr \
         --sysconfdir=/etc --with-trust-paths=/etc/pki/anchors && \
-    make > /dev/null 2>&1 && make install
+    make -j $(nproc) > /dev/null 2>&1 && make install
 
 # Aws Nitro Enclaves SDK dependencies
 WORKDIR /build
@@ -77,53 +77,55 @@ WORKDIR /build
 ENV AWS_S2N_LIB="libs2n.a"
 RUN git clone -b v0.10.11 https://github.com/awslabs/s2n.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S s2n -B s2n/build
-RUN cmake --build s2n/build --target install
+RUN cmake --build s2n/build --parallel $(nproc) --target install
 # AWS-C-COMMON
 ENV AWS_C_COMMON_LIB="libaws-c-common.so.0unstable"
 RUN git clone -b v0.4.51 https://github.com/awslabs/aws-c-common.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-common -B aws-c-common/build
-RUN cmake --build aws-c-common/build --target install
+RUN cmake --build aws-c-common/build --parallel $(nproc) --target install
 # AWS-C-IO
 # TODO: clone the tag once PRs #302, #310 get tagged
 ENV AWS_C_IO_LIB="libaws-c-io.so.0unstable"
 RUN git clone -b master https://github.com/awslabs/aws-c-io.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-io -B aws-c-io/build
-RUN cmake --build aws-c-io/build --target install
+RUN cmake --build aws-c-io/build --parallel $(nproc) --target install
 # AWS-C-COMPRESSION
 ENV AWS_C_COMPRESS_LIB="libaws-c-compression.so.0unstable"
 RUN git clone -b v0.2.10 http://github.com/awslabs/aws-c-compression.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-compression -B aws-c-compression/build
-RUN cmake --build aws-c-compression/build --target install
+RUN cmake --build aws-c-compression/build --parallel $(nproc) --target install
 # AWS-C-HTTP
 ENV AWS_C_HTTP_LIB="libaws-c-http.so.0unstable"
 RUN git clone -b v0.5.16 https://github.com/awslabs/aws-c-http.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-http -B aws-c-http/build
-RUN cmake --build aws-c-http/build --target install
+RUN cmake --build aws-c-http/build --parallel $(nproc) --target install
 # AWS-C-CAL
 ENV AWS_C_CAL_LIB="libaws-c-cal.so.0unstable"
 RUN git clone -b v0.2.7 https://github.com/awslabs/aws-c-cal.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-cal -B aws-c-cal/build
-RUN cmake --build aws-c-cal/build --target install
+RUN cmake --build aws-c-cal/build --parallel $(nproc) --target install
 # AWS-C-AUTH
 ENV AWS_C_AUTH_LIB="libaws-c-auth.so.0unstable"
 RUN git clone -b v0.3.20 https://github.com/awslabs/aws-c-auth.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-auth -B aws-c-auth/build
-RUN cmake --build aws-c-auth/build --target install
+RUN cmake --build aws-c-auth/build --parallel $(nproc) --target install
 # JSON-C library. Has forced SOVERSION
 ENV JSON_LIB="libjson-c.so.5"
 RUN git clone -b json-c-0.14-20200419 https://github.com/json-c/json-c.git
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S json-c -B json-c/build
-RUN cmake --build json-c/build --target install
+RUN cmake --build json-c/build --parallel $(nproc) --target install
 # NSM LIB
 ENV NSM_LIB="libnsm.so"
-RUN git clone -b master https://$USER:$TOKEN@github.com/aws/aws-nitro-enclaves-nsm-api.git
-RUN cd /build/aws-nitro-enclaves-nsm-api && \
-        RUSTFLAGS="-C target-feature=-crt-static" cargo build --release && \
-        mv target/release/"$NSM_LIB" /usr/lib && \
-        mv src/nsm-lib/nsm-lib.h /usr/include
+RUN git clone -b master https://$USER:$TOKEN@github.com/aws/aws-nitro-enclaves-nsm-api.git && \
+    cd /build/aws-nitro-enclaves-nsm-api && \
+    RUSTFLAGS="-C target-feature=-crt-static" cargo build --release -j $(nproc) && \
+    mv /build/aws-nitro-enclaves-nsm-api/target/release/"$NSM_LIB" /usr/lib/ && \
+    mv /build/aws-nitro-enclaves-nsm-api/target/release/nsm.h /usr/include/
+
 # AWS Nitro Enclaves SDK
 ENV AWS_NE_SDK="libaws-nitro-enclaves-sdk-c.so.0unstable"
 RUN git clone https://$USER:$TOKEN@github.com/aws/aws-nitro-enclaves-sdk-c
+
 # Build the SDK against /usr/lib
 RUN cp /usr/lib64/"$AWS_C_COMMON_LIB" \
     /usr/lib64/"$JSON_LIB" \
@@ -136,14 +138,15 @@ RUN cp /usr/lib64/"$AWS_C_COMMON_LIB" \
 
 RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 \
     -S aws-nitro-enclaves-sdk-c -B aws-nitro-enclaves-sdk-c/build
-RUN cmake --build aws-nitro-enclaves-sdk-c/build --verbose --target install && cp /usr/lib64/"$AWS_NE_SDK" /usr/lib/
+RUN cmake --build aws-nitro-enclaves-sdk-c/build --target install && \
+    cp /usr/lib64/"$AWS_NE_SDK" /usr/lib/
 
 # Bring in the eVault source files
 COPY . /build/sources
 
 # Build the vToken p11 provider library and applications
 WORKDIR /build/sources
-RUN RUSTFLAGS="-C target-feature=-crt-static" cargo build --release
+RUN RUSTFLAGS="-C target-feature=-crt-static" cargo build --release -j $(nproc)
 
 # Collect vToken random generator dependencies
 ENV VTOK_RAND="vtok-rand"
