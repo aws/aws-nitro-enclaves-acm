@@ -29,7 +29,7 @@ pub mod schema {
             /// - `ApiError::{InvalidArgs, InternalError}`.
             AddToken {
                 /// The parameters of the new token.
-                token: Token
+                token: Token,
             },
 
             /// Get a high-level description of the evault device, including active tokens
@@ -115,11 +115,15 @@ pub mod schema {
         #[derive(Debug, Deserialize, Serialize)]
         pub enum ApiError {
             AccessDenied,
+            AttestationFailed,
+            EmptyToken,
             InvalidArgs(validators::Error),
             InternalError,
             TokenLabelInUse,
             TokenNotFound,
             TooManyTokens,
+            TokenProvisioningFailed,
+            TokenRefreshFailed,
             // TODO: remove this NYI error once it's not needed anymore.
             Nyi,
         }

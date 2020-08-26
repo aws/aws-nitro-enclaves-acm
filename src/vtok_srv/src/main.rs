@@ -5,6 +5,7 @@ extern crate libc;
 extern crate vtok_common;
 extern crate vtok_rpc;
 
+mod aws_ne;
 mod worker;
 
 use std::fmt;

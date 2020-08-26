@@ -74,45 +74,46 @@ RUN tar xf 0.23.19.tar.gz && \
 WORKDIR /build
 
 # AWS-S2N
-ENV AWS_S2N_LIB="libs2n.a"
-RUN git clone -b v0.10.11 https://github.com/awslabs/s2n.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S s2n -B s2n/build
+ENV AWS_S2N_LIB="libs2n.so"
+RUN git clone -b v0.10.13 https://github.com/awslabs/s2n.git
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S s2n -B s2n/build
 RUN cmake --build s2n/build --parallel $(nproc) --target install
 # AWS-C-COMMON
 ENV AWS_C_COMMON_LIB="libaws-c-common.so.0unstable"
 RUN git clone -b v0.4.51 https://github.com/awslabs/aws-c-common.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-common -B aws-c-common/build
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S aws-c-common -B aws-c-common/build
 RUN cmake --build aws-c-common/build --parallel $(nproc) --target install
 # AWS-C-IO
 # TODO: clone the tag once PRs #302, #310 get tagged
 ENV AWS_C_IO_LIB="libaws-c-io.so.0unstable"
-RUN git clone -b master https://github.com/awslabs/aws-c-io.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-io -B aws-c-io/build
+ENV AWS_C_IO_VSOCK_COMMIT="6c7c8d6955f4953b3383663e8d8bc105d87f5566"
+RUN git clone -b master https://github.com/awslabs/aws-c-io.git && cd aws-c-io && git checkout "$AWS_C_IO_VSOCK_COMMIT" && cd -
+RUN cmake -DUSE_VSOCK=1 -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S aws-c-io -B aws-c-io/build
 RUN cmake --build aws-c-io/build --parallel $(nproc) --target install
 # AWS-C-COMPRESSION
 ENV AWS_C_COMPRESS_LIB="libaws-c-compression.so.0unstable"
 RUN git clone -b v0.2.10 http://github.com/awslabs/aws-c-compression.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-compression -B aws-c-compression/build
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S aws-c-compression -B aws-c-compression/build
 RUN cmake --build aws-c-compression/build --parallel $(nproc) --target install
 # AWS-C-HTTP
 ENV AWS_C_HTTP_LIB="libaws-c-http.so.0unstable"
 RUN git clone -b v0.5.16 https://github.com/awslabs/aws-c-http.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-http -B aws-c-http/build
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S aws-c-http -B aws-c-http/build
 RUN cmake --build aws-c-http/build --parallel $(nproc) --target install
 # AWS-C-CAL
 ENV AWS_C_CAL_LIB="libaws-c-cal.so.0unstable"
 RUN git clone -b v0.2.7 https://github.com/awslabs/aws-c-cal.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-cal -B aws-c-cal/build
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S aws-c-cal -B aws-c-cal/build
 RUN cmake --build aws-c-cal/build --parallel $(nproc) --target install
 # AWS-C-AUTH
 ENV AWS_C_AUTH_LIB="libaws-c-auth.so.0unstable"
 RUN git clone -b v0.3.20 https://github.com/awslabs/aws-c-auth.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S aws-c-auth -B aws-c-auth/build
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S aws-c-auth -B aws-c-auth/build
 RUN cmake --build aws-c-auth/build --parallel $(nproc) --target install
 # JSON-C library. Has forced SOVERSION
 ENV JSON_LIB="libjson-c.so.5"
 RUN git clone -b json-c-0.14-20200419 https://github.com/json-c/json-c.git
-RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -S json-c -B json-c/build
+RUN cmake -DCMAKE_PREFIX_PATH=/usr -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=0 -S json-c -B json-c/build
 RUN cmake --build json-c/build --parallel $(nproc) --target install
 # NSM LIB
 ENV NSM_LIB="libnsm.so"
@@ -128,6 +129,7 @@ RUN git clone https://$USER:$TOKEN@github.com/aws/aws-nitro-enclaves-sdk-c
 
 # Build the SDK against /usr/lib
 RUN cp /usr/lib64/"$AWS_C_COMMON_LIB" \
+    /usr/lib64/"$AWS_S2N_LIB" \
     /usr/lib64/"$JSON_LIB" \
     /usr/lib64/"$AWS_C_IO_LIB" \
     /usr/lib64/"$AWS_C_CAL_LIB" \
@@ -208,6 +210,7 @@ RUN mkdir /rootfs && \
     \
     cp /usr/lib/"$JSON_LIB" /rootfs/usr/lib/"$JSON_LIB" && \
     cp \
+    /usr/lib/"$AWS_S2N_LIB" \
     /usr/lib/"$AWS_NE_SDK" \
     /usr/lib/"$AWS_C_COMMON_LIB" \
     /usr/lib/"$AWS_C_IO_LIB" \
@@ -220,6 +223,11 @@ RUN mkdir /rootfs && \
 
 # Strip all deliverables
 RUN find /rootfs/ -type f -exec strip --strip-unneeded {} \;
+
+# Setup TLS certificate file (for S2N)
+RUN apk add ca-certificates && \
+    mkdir -p /rootfs/etc/ssl/certs && \
+    cp /etc/ssl/certs/ca-certificates.crt /rootfs/etc/ssl/certs/ca-certificates.crt
 
 # Enclave initialization script. Bash is required to run it because
 # we need to spawn two server programs.

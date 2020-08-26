@@ -3,8 +3,10 @@
 
 use vtok_common::{config, defs, util};
 use vtok_rpc::api::schema;
-use vtok_rpc::api::schema::{ApiError, ApiRequest, ApiResponse, ApiOk};
+use vtok_rpc::api::schema::{ApiError, ApiOk, ApiRequest, ApiResponse};
 use vtok_rpc::{Transport, TransportError};
+
+use super::aws_ne;
 
 #[derive(Debug)]
 pub enum Error {
@@ -36,17 +38,16 @@ where
                 ApiRequest::AddToken { token } => Self::add_token(token),
                 ApiRequest::DescribeDevice => Self::describe_device(),
                 ApiRequest::DescribeToken { label, pin } => Self::describe_token(label, pin),
-                ApiRequest::RefreshToken { label, pin, envelope_key } => {
-                    Self::refresh_token(label, pin, envelope_key)
-                },
-                ApiRequest::RemoveToken {label, pin } => Self::remove_token(label, pin),
-                ApiRequest::UpdateToken { .. } => {
-                    Err(ApiError::Nyi)
-                }
+                ApiRequest::RefreshToken {
+                    label,
+                    pin,
+                    envelope_key,
+                } => Self::refresh_token(label, pin, envelope_key),
+                ApiRequest::RemoveToken { label, pin } => Self::remove_token(label, pin),
+                ApiRequest::UpdateToken { .. } => Err(ApiError::Nyi),
             });
 
-        self
-            .transport
+        self.transport
             .send_response(response)
             .map_err(Error::TransportError)
     }
@@ -74,18 +75,30 @@ where
             .find(|s| s.is_none())
             .ok_or(ApiError::TooManyTokens)?;
 
-        let private_keys = token
-            .keys
-            .iter()
-            .map(|key| {
-                // TODO: use envelope key to decript private keys.
-                config::PrivateKey {
-                    pem: key.encrypted_pem.clone(),
-                    id: key.id,
-                    label: key.label.clone(),
-                }
+        let mut private_keys = Vec::new();
+        for key in token.keys {
+            private_keys.push(config::PrivateKey {
+                pem: match token.envelope_key {
+                    schema::EnvelopeKey::Kms {
+                        ref region,
+                        ref access_key_id,
+                        ref secret_access_key,
+                        ref session_token,
+                    } => aws_ne::kms_decrypt(
+                        region.as_bytes(),
+                        access_key_id.as_bytes(),
+                        secret_access_key.as_bytes(),
+                        session_token.as_bytes(),
+                        key.encrypted_pem.as_bytes(),
+                    )
+                    .map_err(|_| ApiError::AttestationFailed)
+                    .and_then(|v| String::from_utf8(v).map_err(|_| ApiError::AttestationFailed))?,
+                },
+                encrypted_pem: key.encrypted_pem,
+                id: key.id,
+                label: key.label,
             })
-            .collect();
+        }
 
         free_slot.replace(config::Token {
             label: token.label,
@@ -155,7 +168,7 @@ where
         Ok(ApiOk::TokenDescription(token_desc))
     }
 
-    fn refresh_token(label: String, pin: String, _envelope_key: schema::EnvelopeKey) -> ApiResponse {
+    fn refresh_token(label: String, pin: String, envelope_key: schema::EnvelopeKey) -> ApiResponse {
         let mut config = config::Config::load_rw().map_err(|_| ApiError::InternalError)?;
         let slot = config
             .slots_mut()
@@ -172,8 +185,37 @@ where
             return Err(ApiError::AccessDenied);
         }
 
-        // TODO: perform attestation
-        //
+        // Since all the keys in one token are encrypted via the same envelope, we only need to
+        // successfully decrypt one key, in order to achieve attestation.
+        token
+            .private_keys
+            .iter()
+            .next()
+            .ok_or(ApiError::EmptyToken)
+            .and_then(|key| {
+                match envelope_key {
+                    schema::EnvelopeKey::Kms {
+                        ref region,
+                        ref access_key_id,
+                        ref secret_access_key,
+                        ref session_token,
+                    } => {
+                        aws_ne::kms_decrypt(
+                            region.as_bytes(),
+                            access_key_id.as_bytes(),
+                            secret_access_key.as_bytes(),
+                            session_token.as_bytes(),
+                            key.encrypted_pem.as_bytes(),
+                        )
+                        .map_err(|_| ApiError::AttestationFailed)
+                        .and_then(|v| String::from_utf8(v).map_err(|_| ApiError::AttestationFailed))
+                        .ok()
+                        .filter(|pem| pem == &key.pem)
+                        .ok_or(ApiError::AttestationFailed)?;
+                    }
+                };
+                Ok(())
+            })?;
         token.expiry_ts = util::time::monotonic_secs() + defs::TOKEN_EXPIRY_SECS;
 
         config.save().map_err(|_| ApiError::InternalError)?;

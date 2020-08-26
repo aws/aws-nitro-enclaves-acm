@@ -57,7 +57,6 @@ enum CliOption {
     Server(ServerAddr),
 }
 
-
 impl From<Error> for i32 {
     fn from(_other: Error) -> i32 {
         // NOTE: we could discriminate between errors here to provide a more specific
@@ -128,12 +127,9 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
         transport
             .send_request(request)
             .map_err(Error::TransportError)?;
-        let response = transport
-            .recv_response()
-            .map_err(Error::TransportError)?;
+        let response = transport.recv_response().map_err(Error::TransportError)?;
 
-        serde_json::to_writer(std::io::stdout(), &response)
-            .map_err(Error::SerdeError)?;
+        serde_json::to_writer(std::io::stdout(), &response).map_err(Error::SerdeError)?;
 
         Ok(())
     }
