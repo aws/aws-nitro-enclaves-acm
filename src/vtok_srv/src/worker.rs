@@ -36,8 +36,8 @@ where
                 ApiRequest::AddToken { token } => Self::add_token(token),
                 ApiRequest::DescribeDevice => Self::describe_device(),
                 ApiRequest::DescribeToken { label, pin } => Self::describe_token(label, pin),
-                ApiRequest::RefreshToken { label, pin, aws_id, aws_secret } => {
-                    Self::refresh_token(label, pin, aws_id, aws_secret)
+                ApiRequest::RefreshToken { label, pin, envelope_key } => {
+                    Self::refresh_token(label, pin, envelope_key)
                 },
                 ApiRequest::RemoveToken {label, pin } => Self::remove_token(label, pin),
                 ApiRequest::UpdateToken { .. } => {
@@ -155,7 +155,7 @@ where
         Ok(ApiOk::TokenDescription(token_desc))
     }
 
-    fn refresh_token(label: String, pin: String, _aws_id: String, _aws_secret: String) -> ApiResponse {
+    fn refresh_token(label: String, pin: String, _envelope_key: schema::EnvelopeKey) -> ApiResponse {
         let mut config = config::Config::load_rw().map_err(|_| ApiError::InternalError)?;
         let slot = config
             .slots_mut()

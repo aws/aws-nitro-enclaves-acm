@@ -69,10 +69,9 @@ pub mod schema {
                 label: String,
                 /// The PIN granting access to the token identified by `label`.
                 pin: String,
-                /// AWS credentials: AWS_KEY_ID.
-                aws_id: String,
-                /// AWS credentials: AWS_SECRET_KEY_ID.
-                aws_secret: String,
+                /// The envelope key specification, used to perform enclave attestation / decrypt
+                /// the token private keys.
+                envelope_key: EnvelopeKey,
             },
 
             /// Remove a specific token from the evault device.
@@ -127,7 +126,12 @@ pub mod schema {
 
         #[derive(Debug, Deserialize, Serialize)]
         pub enum EnvelopeKey {
-            Kms(String),
+            Kms {
+                region: String,
+                access_key_id: String,
+                secret_access_key: String,
+                session_token: String,
+            },
         }
 
         #[derive(Debug, Deserialize, Serialize)]
