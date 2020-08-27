@@ -20,6 +20,12 @@ P11KIT_SERVER_PORT="9999"
 DEFAULT_CPUS="2"
 DEFAULT_MEMORY="256"
 
+AWS_REGION=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_SESSION_TOKEN=
+
+
 USAGE="\
 $MY_NAME v$MY_VERSION - $MY_DESC
 Usage: $(basename "$0") <command> [arguments]
@@ -27,39 +33,33 @@ Usage: $(basename "$0") <command> [arguments]
 Commands:
 
     start           Start the eVault enclave
-        --cpu-count     <cpu-count>
-        --memory        <memory>
+        --cpu-count     The number of vCPUs to allocate for the eVault enclave.
+        --memory        eVault enclave memory size, in MiB.
 
     init-token      Initialize an eVault token
-        --key-db        <key.db>
-        --label         <label>
-        --pin           <pin>
-        --aws-id        <AWS_ACCESS_KEY_ID>
-        --aws-secret    <AWS_SECRET_ACCESS_KEY>
-
-    update-token    Update an eVault token
-        --key-db        <new-key.db>
-        --label         <label>
-        --pin           <pin>
-        --aws-id        <AWS_ACCESS_KEY_ID>
-        --aws-secret    <AWS_SECRET_ACCESS_KEY>
-        --aws-session   <AWS_SESSION_TOKEN>
+        --key-db        The database file to be loaded into eVault for this token.
+                        See \`evault-db help\` for information on generating this file.
+        --label         The token PKCS#11 label; a UTF-8 string, between 1 and 32 bytes long.
+                        Note: the token label must be unique across all eVault tokens.
+        --pin           The PIN that should be used to secure access to this token;
+                        a UTF-8 string, between 4 and 64 bytes long.
 
     refresh-token   Refresh an eVault token
-        --label         <label>
-        --pin           <pin>
-        --aws-id        <AWS_ACCESS_KEY_ID>
-        --aws-secret    <AWS_SECRET_ACCESS_KEY>
+        --label         Token label.
+        --pin           The PIN used to access this token (previously set via an init-token
+                        operation).
 
     release-token   Release an eVault token
-        --label         <label>
-        --pin           <pin>
+        --label         The label that (uniquely) identifies the token to be released.
+        --pin           The PIN used to access this token (previously set via an init-token
+                        operation).
 
     describe-device Get information about the eVault device
 
     describe-token  Get information about an eVault vToken
-        --label         <label>
-        --pin           <pin>
+        --label         The label that (uniquely) identifies the token to be released.
+        --pin           The PIN used to access this token (previously set via an init-token
+                        operation).
 
     stop            Stop the eVault enclave
 "
@@ -95,6 +95,22 @@ ensure_nitro_cli() {
 ensure_nitro_vtoken() {
     which "$NITRO_VTOKEN" > /dev/null 2>&1
     ok_or_die "The nitro-vtoken tool is not installed. Aborting."
+}
+
+# Ensure we have a valid set of AWS credentials (fetched from IMDS)
+#
+ensure_aws_creds() {
+    creds_json=$(curl -fs \
+        http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance)
+    ok_or_die "Unable to find instance role credentials." \
+        "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
+    AWS_REGION="us-east-1"
+    AWS_ACCESS_KEY_ID=$(echo "$creds_json" | jq -er ".AccessKeyId")
+    ok_or_die "Unable to parse instance role credentials."
+    AWS_SECRET_ACCESS_KEY=$(echo "$creds_json" | jq -er ".SecretAccessKey")
+    ok_or_die "Unable to parse instance role credentials."
+    AWS_SESSION_TOKEN=$(echo "$creds_json" | jq -er ".Token")
+    ok_or_die "Unable to parse instance role credentials."
 }
 
 # Keep p11-kit client-side configuration in sync with the current
@@ -247,10 +263,9 @@ execute_rpc() {
 #
 cmd_init-token() {
     ensure_nitro_vtoken
+    ensure_aws_creds
 
-    # TODO: fetch AWS region/credentials from IMDS instead of CLI
-
-    if [ "$#" -ne 14 ]; then
+    if [ "$#" -ne 6 ]; then
         die "Invalid arguments. Please use \`$MY_NAME help\` for help."
     fi
 
@@ -259,10 +274,6 @@ cmd_init-token() {
             --key-db) key_db="$2"; shift ;;
             --label) label="$2"; shift ;;
             --pin) pin="$2"; shift ;;
-            --aws-id) aws_id="$2"; shift;;
-            --aws-secret) aws_secret="$2"; shift ;;
-            --aws-session) aws_session="$2"; shift ;;
-            --aws-region) aws_region="$2"; shift ;;
             *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
         esac
         shift
@@ -280,10 +291,10 @@ cmd_init-token() {
     # TODO: When KMS is available
     local envelope_key
     envelope_key=$( jq -Rn \
-                --arg a "$aws_id" \
-                --arg b "$aws_secret" \
-                --arg c "$aws_session" \
-                --arg d "$aws_region" \
+                --arg a "$AWS_ACCESS_KEY_ID" \
+                --arg b "$AWS_SECRET_ACCESS_KEY" \
+                --arg c "$AWS_SESSION_TOKEN" \
+                --arg d "$AWS_REGION" \
                 '{Kms: {access_key_id: $a, secret_access_key: $b, session_token: $c, region: $d}}')
     ok_or_die "Cannot construct Kms credentials."
 
@@ -307,10 +318,9 @@ cmd_init-token() {
 #
 cmd_refresh-token() {
     ensure_nitro_vtoken
+    ensure_aws_creds
 
-    # TODO: fetch AWS region/credentials from IMDS instead of CLI
-
-    if [ "$#" -ne 12 ]; then
+    if [ "$#" -ne 4 ]; then
         die "Invalid arguments. Please use \`$MY_NAME help\` for help."
     fi
 
@@ -318,10 +328,6 @@ cmd_refresh-token() {
         case $1 in
             --label) label="$2"; shift ;;
             --pin) pin="$2"; shift ;;
-            --aws-id) aws_id="$2"; shift ;;
-            --aws-secret) aws_secret="$2"; shift ;;
-            --aws-session) aws_session="$2"; shift ;;
-            --aws-region) aws_region="$2"; shift ;;
             *) cmd_help; die "Invalid arguments. Please use \`$MY_NAME help\` for help.";;
         esac
         shift
@@ -330,10 +336,10 @@ cmd_refresh-token() {
     # The envelope key
     local envelope_key
     envelope_key=$( jq -Rn \
-                --arg a "$aws_id" \
-                --arg b "$aws_secret" \
-                --arg c "$aws_session" \
-                --arg d "$aws_region" \
+                --arg a "$AWS_ACCESS_KEY_ID" \
+                --arg b "$AWS_SECRET_ACCESS_KEY" \
+                --arg c "$AWS_SESSION_TOKEN" \
+                --arg d "$AWS_REGION" \
                 '{Kms: {access_key_id: $a, secret_access_key: $b, session_token: $c, region: $d}}')
     ok_or_die "Cannot construct Kms credentials."
 
