@@ -11,14 +11,14 @@ EVAULT_IMAGE="evault.eif"
 NITRO_CLI="nitro-cli"
 NITRO_VTOKEN="nitro-vtoken"
 NITRO_CONFIG="nitro-cli-config.sh"
-P11KIT_CLIENT_MODULE=".config/pkcs11/modules"
-P11KIT_CLIENT_CONFIG="evault.module"
-P11KIT_PROVIDER_NAME="libvtok_p11.so"
 PROVISIONING_SERVER_PORT="10000"
 AF_UNIX_RPC_FILE="/vtok/build/rpc.sock"
 P11KIT_SERVER_PORT="9999"
 DEFAULT_CPUS="2"
 DEFAULT_MEMORY="256"
+
+PKCS11_CONFIG_FILE="/etc/pkcs11/modules/evault.module"
+PKCS11_PROVIDER_NAME="libvtok_p11.so"
 
 AWS_REGION=
 AWS_ACCESS_KEY_ID=
@@ -116,31 +116,36 @@ ensure_aws_creds() {
 # Keep p11-kit client-side configuration in sync with the current
 # eVault enclave vsock CID.
 #
-create_p11kit_client_config() {
+create_pkcs11_config() {
     local cid
     cid=$("$NITRO_CLI" describe-enclaves | jq '.[] | .EnclaveCID')
     ok_or_die "Cannot get eVault enclave CID."
 
-    local remote
-    remote="remote:vsock:cid=$cid;port=$P11KIT_SERVER_PORT"
-    local module
-    module="module:$P11KIT_PROVIDER_NAME"
+    conf="remote:vsock:cid=$cid;port=$P11KIT_SERVER_PORT"
+    conf="$conf\nmodule:$PKCS11_PROVIDER_NAME"
 
-    mkdir -p "$HOME/$P11KIT_CLIENT_MODULE"
-    ok_or_die "Cannot create p11-kit client evault config directory."
-    touch "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
-    ok_or_die "Cannot create p11-kit client evault config file."
-    echo "$remote" > "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
-    ok_or_die "Cannot update p11-kit client evault config."
-    echo "$module" >> "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
-    ok_or_die "Cannot update p11-kit client evault config."
+    {
+        mkdir -p $(dirname "$PKCS11_CONFIG_FILE") \
+            && echo -e "$conf" > "$PKCS11_CONFIG_FILE"
+    } 2> /dev/null
+    [[ $? -eq 0 ]] && [ -t 1 ] || {
+        say "$MY_NAME requires permission to create $PKCS11_CONFIG_FILE"
+        sudo mkdir -p "$(dirname "$PKCS11_CONFIG_FILE")" \
+            && { echo -e "$conf" | sudo tee  "$PKCS11_CONFIG_FILE"; } > /dev/null
+    }
+    ok_or_die "Cannot write PKCS#11 eVault config to $PKCS11_CONFIG_FILE"
+    say "Successfully created PKCS#11 config at $PKCS11_CONFIG_FILE"
 }
 
 # Cleanup module configuration
 #
-remove_p11kit_client_config() {
-    rm "$HOME/$P11KIT_CLIENT_MODULE/$P11KIT_CLIENT_CONFIG"
-    ok_or_die "Cannot remove p11-kit client evault config directory."
+remove_pkcs11_config() {
+    rm -f "$PKCS11_CONFIG_FILE" 2> /dev/null
+    [[ $? -eq 0 ]] && [ -t 1 ] || {
+        say "$MY_NAME requires permission to remove $PKCS11_CONFIG_FILE"
+        sudo rm -f "$PKCS11_CONFIG_FILE"
+    }
+    [[ $? -eq 0 ]] || say_warn "Unable to remove $PKCS11_CONFIG_FILE"
 }
 
 # Prepare eVault enclave memory and cpu configuration
@@ -205,7 +210,7 @@ cmd_start() {
 
     say "Successfully started the eVault enclave."
 
-    create_p11kit_client_config
+    create_pkcs11_config
 }
 
 # Stop the eVault
@@ -228,7 +233,7 @@ cmd_stop() {
 
     say "Successfully stopped the eVault enclave."
 
-    remove_p11kit_client_config
+    remove_pkcs11_config
 }
 
 # Issue a RPC call
@@ -288,7 +293,6 @@ cmd_init-token() {
     keys="$(<"$key_db")"
 
     # The envelope key
-    # TODO: When KMS is available
     local envelope_key
     envelope_key=$( jq -Rn \
                 --arg a "$AWS_ACCESS_KEY_ID" \
@@ -354,7 +358,7 @@ cmd_refresh-token() {
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$rpc_args")
+    result=$(execute_rpc "$rpc_request")
     echo "$result" | jq
 }
 
@@ -386,7 +390,7 @@ cmd_release-token() {
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$rpc_args")
+    result=$(execute_rpc "$rpc_request")
     echo "$result" | jq
 }
 
@@ -433,7 +437,7 @@ cmd_describe-token() {
 
     # Execute RPC
     local result
-    result=$(execute_rpc "$rpc_args")
+    result=$(execute_rpc "$rpc_request")
     echo "$result" | jq
 }
 
@@ -457,11 +461,19 @@ ok_or_die() {
     [[ $code -eq 0 ]] || die -c $code "$@"
 }
 
-# Send a text message to stderr
+# Send an error-decorated text message to stderr
 #
 say_err() {
     [ -t 2 ] && [ -n "$TERM" ] \
         && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a warning-decorated text message to stderr
+#
+say_warn() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 3)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
         || echo "[$MY_NAME] $*" 1>&2
 }
 
