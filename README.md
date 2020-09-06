@@ -3,8 +3,8 @@
 This is a PKCS#11 provider intended to be executed within the confines of a
 Nitro Enclave.
 
-Development is aided by a Docker container that can be used to build and test
-run the PKCS#11 provider as a `p11-kit` module. This container is designed to
+Development is aided by Docker containers that can be used to build and test
+run the PKCS#11 provider as a `p11-kit` module. These containers are designed to
 be mostly transparent to the developer, and employed via the omnitool at
 `tools/devtool`.
 
@@ -36,51 +36,66 @@ Here is the general flow of a parent instance crypto operation:
                                           |        Encryption Vault
                                           |              |
                                           |              v
-                                          |	    AWS libcrypto
+                                          |	        AWS libcrypto
 ```
 
 ## Dependencies
 
-All build and runtime dependencies are installed in the development container,
-so the only dependency on the developer host is Docker.
+`devtool` sets up two containers: one for emulating the enclave environment,
+and another for emulating the parent instance environment.
 
-If using Docker is not an option, have a look at the Dockerfile for a full list
-of packages needed to build and run Encryption Vault. Additionally, the
-`devtool` source (it's just a BASH script) may provide useful details on what
-environment setup is required prior to building and/or running.
+Most dependencies are handled by the containers. However, there are still a few
+required on the host development machine: docker, bash, git, and make.
 
+## Components
+
+eVault has a few different components, some meant to be run inside the enclave,
+others inside the parent instance:
+- enclave-side components:
+  - `vtok-rand` - entropy seeder, run once at enclave boot;
+  - `vtok-srv` - the eVault RPC server, used to query the state of the eVault
+     device, and to provision its database;
+  - `libvtok_p11.so` - the PKCS#11 provider;
+- parent-instance-side components:
+  - `nitro-vtoken` - the eVault RPC client, providing a low-level interface to
+    the eVault RPC server;
+  - `nitro-evault` - a user-facing CLI tool that can be used to manage the
+    eVault enclave (e.g. provision PKCS#11 tokens)
 
 ## Building
 
-After cloning this repo, you need to build the development container locally:
+Use `devtool` to build any eVault component, by invoking `devtool build <component>`.
+
+E.g. building the PKCS#11 provider:
 
 ```bash
-tools/devtool mkdevctr
+tools/devtool build libvtok_p11.so
 ```
 
-and then you can build the PKCS#11 provider:
+Building the (development version of) eVault enclave image (EIF):
 
 ```bash
-tools/devtool build
+tools/devtool build dev-image
 ```
 
+See `devtool help` for more build options.
 
 ## Testing in the development environment
 
-`devtool` uses the development container to simulate both the enclave and
+`devtool` uses development containers to simulate both the enclave and
 parent instance environments. The communication channel between `p11-kit
 client` and `p11-kit server` is emulated via an Unix socket, bind-mounted into
 both container environments (parent and enclave).
 
 **Note**: The emulated enclave environment differs substantially from the
 production enclave, and it is only to be used for testing the PKCS#11 API
-functionality of Encryption Vault. Most notably, attestation and token
-provisioning are both missing from the emulated environment.
+functionality of Encryption Vault. Most notably, attestation is missing from
+the emulated environment.
 
 First, the enclave container needs to be running:
 
 ```bash
-tools/devtool runenclave
+tools/devtool simulate-enclave
 ```
 
 This will start `p11-kit server` with the Encryption Vault module loaded (the
@@ -91,7 +106,7 @@ With the enclave environment up and running, the parent environment can be
 started:
 
 ```bash
-tools/devtool runparent
+tools/devtool simulate-parent
 ```
 
 This will spin up a container with p11-kit configured to access the remote
@@ -103,7 +118,7 @@ pointing to the Encryption Vault module:
 
 ```bash
 openssl pkeyutl -keyform engine -engine pkcs11 -sign -inkey \
-	"pkcs11:model=Nitro-vToken;manufacturer=Amazon;serial=EVT00;token=EncryptionVault-Token;id=%52;type=private" \
+	"pkcs11:model=evault-token;manufacturer=Amazon;serial=EVT00;token=my-token-label;id=%52;type=private" \
 	-in hello.txt -out test.sig
 ```
 
@@ -115,20 +130,6 @@ Tests can be executer via:
 ```
 The above test suite is also applicable when using real enclaves.
 
-
-## Testing with an enclave
-
-The root directory of this project contains an enclave reference Dockerfile using
-Alpine base for building the deliverables and then a scratch image for the run-time
-image. The image spawns the provisioning server and the p11-kit server respectively
-as init. This Docker image which can be used as input in the `nitro-cli` builder for
-generating a bootable EIF image. See the `nitro-cli` documentation for more details.
-
-The eVault enclave docker image can be built by executing the root builder script:
-```bash
-./evault-build build --tag <my-tag> --token <my-github-token>
-```
-
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
@@ -136,5 +137,4 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
-
 
