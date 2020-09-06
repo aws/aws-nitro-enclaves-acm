@@ -12,7 +12,7 @@ pub mod defs {
 
     /// The filesystem path used to store the eVault DB/config file. This is read by the PKCS#11
     /// provider (vtok_p11), and written to by the RPC server (vtok_srv).
-    pub const DEVICE_CONFIG_PATH: &str = "/vtok/device/config.json";
+    pub const DEVICE_CONFIG_PATH: &str = "./config.json";
     /// PKCS#11 provider description, as reported by vtok_p11.
     pub const DEVICE_DESCRIPTION: &str = "nitro-evault";
     /// Maximum number of slots/tokens exposed by our PKCS#11 provider.
