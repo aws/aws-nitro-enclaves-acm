@@ -100,8 +100,11 @@ ensure_nitro_vtoken() {
 # Ensure we have a valid set of AWS credentials (fetched from IMDS)
 #
 ensure_aws_creds() {
-    creds_json=$(curl -fs \
-        http://169.254.169.254/latest/meta-data/identity-credentials/ec2/security-credentials/ec2-instance)
+    arn_role=$(curl -fs http://169.254.169.254/latest/meta-data/iam/info | jq -r .InstanceProfileArn)
+    ok_or_die "Unable to get the IAM info for this instance role." \
+        "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
+    role="${arn_role#*/}"
+    creds_json=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role")
     ok_or_die "Unable to find instance role credentials." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
     AWS_REGION="us-east-1"
@@ -125,7 +128,7 @@ create_pkcs11_config() {
     conf="$conf\nmodule:$PKCS11_PROVIDER_NAME"
 
     {
-        mkdir -p $(dirname "$PKCS11_CONFIG_FILE") \
+        mkdir -p "$(dirname "$PKCS11_CONFIG_FILE")" \
             && echo -e "$conf" > "$PKCS11_CONFIG_FILE"
     } 2> /dev/null
     [[ $? -eq 0 ]] && [ -t 1 ] || {

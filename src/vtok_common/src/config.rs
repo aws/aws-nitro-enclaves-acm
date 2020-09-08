@@ -18,7 +18,7 @@ pub enum Error {
 #[derive(Deserialize, Serialize)]
 pub struct PrivateKey {
     pub pem: String,
-    pub encrypted_pem: String,
+    pub encrypted_pem_b64: String,
     pub id: u8,
     pub label: String,
 }

@@ -7,6 +7,7 @@ use vtok_rpc::api::schema::{ApiError, ApiOk, ApiRequest, ApiResponse};
 use vtok_rpc::{Transport, TransportError};
 
 use super::aws_ne;
+use base64;
 
 #[derive(Debug)]
 pub enum Error {
@@ -89,12 +90,15 @@ where
                         access_key_id.as_bytes(),
                         secret_access_key.as_bytes(),
                         session_token.as_bytes(),
-                        key.encrypted_pem.as_bytes(),
+                        &base64::decode(key.encrypted_pem_b64.as_str())
+                            .map_err(|_| ApiError::TokenKeyDecodingFailed)?,
                     )
-                    .map_err(|_| ApiError::AttestationFailed)
-                    .and_then(|v| String::from_utf8(v).map_err(|_| ApiError::AttestationFailed))?,
+                    .map_err(|_| ApiError::KmsDecryptFailed)
+                    .and_then(|v| {
+                        String::from_utf8(v).map_err(|_| ApiError::TokenProvisioningFailed)
+                    })?,
                 },
-                encrypted_pem: key.encrypted_pem,
+                encrypted_pem_b64: key.encrypted_pem_b64,
                 id: key.id,
                 label: key.label,
             })
@@ -205,13 +209,16 @@ where
                             access_key_id.as_bytes(),
                             secret_access_key.as_bytes(),
                             session_token.as_bytes(),
-                            key.encrypted_pem.as_bytes(),
+                            &base64::decode(key.encrypted_pem_b64.as_str())
+                                .map_err(|_| ApiError::TokenKeyDecodingFailed)?,
                         )
-                        .map_err(|_| ApiError::AttestationFailed)
-                        .and_then(|v| String::from_utf8(v).map_err(|_| ApiError::AttestationFailed))
+                        .map_err(|_| ApiError::KmsDecryptFailed)
+                        .and_then(|v| {
+                            String::from_utf8(v).map_err(|_| ApiError::TokenRefreshFailed)
+                        })
                         .ok()
                         .filter(|pem| pem == &key.pem)
-                        .ok_or(ApiError::AttestationFailed)?;
+                        .ok_or(ApiError::TokenRefreshFailed)?;
                     }
                 };
                 Ok(())

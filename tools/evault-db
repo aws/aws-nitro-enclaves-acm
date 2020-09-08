@@ -59,7 +59,7 @@ cmd_pack-key() {
     ok_or_die "aws cli is not present on this machine. Please install the aws cli and try again."
 
     #encrypt with kms - the result is the Base64 representation of the cyphertext
-    enc_key=$(aws kms encrypt --key-id $key_id --plaintext "$key" --region $region --query CiphertextBlob | sed -e 's/\"//g')
+    enc_key=$(aws kms encrypt --key-id $key_id --plaintext "$key" --region $region --query CiphertextBlob --output text)
     ok_or_die "Failed to encrypt the key"
 
     local out_data
@@ -67,7 +67,7 @@ cmd_pack-key() {
             --arg a "$enc_key" \
             --arg b "$id" \
             --arg c "$label" \
-            '{encrypted_pem: $a, id: $b | tonumber, label: $c}' )
+            '{encrypted_pem_b64: $a, id: $b | tonumber, label: $c}' )
     ok_or_die "Cannot format the input key."
 
     echo "$out_data" > "$out_file.db"

@@ -128,16 +128,13 @@ pub fn kms_decrypt(
         }
         return Err(Error::SdkKmsClientError);
     }
-    // Decrypt. Pass an aws_byte_buf. The vector shall be updated on success.
-    // Plaintext
-    let mut plaintext = vec![0u8; ffi::KMS_MAX_DECRYPT_LEN];
-    let mut plaintext_buf = unsafe {
-        ffi::aws_byte_buf_from_array(plaintext.as_mut_ptr() as *mut ffi::c_void, plaintext.len())
-    };
     // Ciphertext
     let ciphertext_buf = unsafe {
         ffi::aws_byte_buf_from_array(ciphertext.as_ptr() as *mut ffi::c_void, ciphertext.len())
     };
+
+    // Decrypt
+    let mut plaintext_buf: ffi::aws_byte_buf = unsafe { std::mem::zeroed() };
     let rc =
         unsafe { ffi::aws_kms_decrypt_blocking(kms_client, &ciphertext_buf, &mut plaintext_buf) };
     if rc != 0 {
@@ -164,7 +161,11 @@ pub fn kms_decrypt(
         ffi::aws_nitro_enclaves_library_clean_up();
     }
 
-    plaintext.resize(plaintext_buf.len as usize, 0);
+    // Plaintext
+    let plaintext = unsafe {
+        std::slice::from_raw_parts(plaintext_buf.buffer, plaintext_buf.len as usize).to_vec()
+    };
+    unsafe { ffi::aws_byte_buf_clean_up_secure(&mut plaintext_buf) };
 
     Ok(plaintext)
 }
