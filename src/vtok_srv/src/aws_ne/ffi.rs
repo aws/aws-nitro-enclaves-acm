@@ -18,7 +18,7 @@ pub const KMS_MAX_DECRYPT_LEN: usize = 4096;
 #[repr(C)]
 pub struct aws_byte_buf {
     pub len: c_size_t,
-    buffer: *mut u8,
+    pub buffer: *mut u8,
     capacity: c_size_t,
     allocator: *mut aws_allocator,
 }
@@ -55,6 +55,7 @@ extern "C" {
         len: c_size_t,
     ) -> *mut aws_string;
     pub fn aws_string_destroy_secure(string: *mut aws_string);
+    pub fn aws_byte_buf_clean_up_secure(buf: *mut aws_byte_buf);
 
     /// AWS Nitro Enclaves SDK
     pub fn aws_nitro_enclaves_library_init(allocator: *mut aws_allocator);

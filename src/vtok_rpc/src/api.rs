@@ -115,7 +115,6 @@ pub mod schema {
         #[derive(Debug, Deserialize, Serialize)]
         pub enum ApiError {
             AccessDenied,
-            AttestationFailed,
             EmptyToken,
             InvalidArgs(validators::Error),
             InternalError,
@@ -124,6 +123,8 @@ pub mod schema {
             TooManyTokens,
             TokenProvisioningFailed,
             TokenRefreshFailed,
+            TokenKeyDecodingFailed,
+            KmsDecryptFailed,
             // TODO: remove this NYI error once it's not needed anymore.
             Nyi,
         }
@@ -140,7 +141,7 @@ pub mod schema {
 
         #[derive(Debug, Deserialize, Serialize)]
         pub struct PrivateKey {
-            pub encrypted_pem: String,
+            pub encrypted_pem_b64: String,
             pub id: u8,
             pub label: String,
         }
