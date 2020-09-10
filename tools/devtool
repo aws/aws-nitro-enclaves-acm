@@ -577,6 +577,8 @@ cmd_simulate-parent() {
     fi
 
     docker run --rm -it \
+        --env EVAULT_DEVENV=y \
+        --env EVAULT_DEVENV_RPC_SOCK="$CTR_RUN_DIR/rpc.sock" \
         -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
         "$PARENT_CTR_IMG" \
         sh -c "
@@ -584,7 +586,8 @@ cmd_simulate-parent() {
                 | sudo tee /etc/pkcs11/modules/evault.module > /dev/null
             echo \"module:$EVBIN_P11_MOD\" \
                 | sudo tee -a /etc/pkcs11/modules/evault.module > /dev/null
-            PS1=\"[$USER@evault-parent \\W] \" PATH=\"\$PATH:$CTR_BUILD_DIR/target/debug\" bash
+            PS1=\"[$USER@evault-parent \\W] \" \
+                PATH=\"\$PATH:$CTR_BUILD_DIR/target/debug:$CTR_SRC_DIR/tools\" bash
         "
 }
 
