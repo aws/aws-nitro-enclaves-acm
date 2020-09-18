@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-set -u
 
 MY_VERSION="1.0"
 MY_NAME="nitro-evault"
@@ -73,7 +72,7 @@ Commands:
 # Usage: die [-c <error code>] <error message>
 #
 die() {
-    code=1
+    local code=1
     [[ "$1" = "-c" ]] && {
         code="$2"
         shift 2
@@ -85,7 +84,7 @@ die() {
 # Exit with an error message if the last exit code is not 0
 #
 ok_or_die() {
-    code=$?
+    local code=$?
     [[ $code -eq 0 ]] || die -c $code "$@"
 }
 
@@ -121,7 +120,7 @@ evault_eif_path() {
 
 evault_rpc_server_addr() {
     if [[ "$EVAULT_DEVENV" != y ]]; then
-        cid=$(nitro-cli describe-enclaves | jq ".[] | .EnclaveCID")
+        local cid=$(nitro-cli describe-enclaves | jq ".[] | .EnclaveCID")
         [[ -n "$cid" ]] || return 1
         echo "vsock:$cid:$EVAULT_RPC_PORT"
     else
@@ -132,7 +131,7 @@ evault_rpc_server_addr() {
 # Ensure the eVault image is present
 #
 ensure_eif() {
-    path=$(evault_eif_path)
+    local path=$(evault_eif_path)
     [[ -f "$path" ]] || die "Error: evault EIF not found at $path"
     [[ -r "$path" ]] || die "Error: cannot read eVault EIF from $path"
 }
@@ -147,10 +146,11 @@ ensure_nitro_cli() {
 # Ensure we have a valid set of AWS credentials (fetched from IMDS)
 #
 ensure_aws_creds() {
-    arn_role=$(curl -fs http://169.254.169.254/latest/meta-data/iam/info | jq -r .InstanceProfileArn)
+    local role
+    role=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/)
     ok_or_die "Unable to get the IAM info for this instance role." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
-    role="${arn_role#*/}"
+    local creds_json
     creds_json=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role")
     ok_or_die "Unable to find instance role credentials." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
@@ -173,14 +173,36 @@ ensure_vsock_proxy() {
     ok_or_die "Failed to start vsock-proxy"
 }
 
+ensure_enclave_resources() {
+    local help="
+    You can make sure that enough resources are reserved for the Nitro enclave
+    by running nitro-cli-config shortly after instance boot:
+
+        nitro-cli-config -t <number of CPUs to reserve> -m <memory MiB to reserve>
+    "
+
+    local enclave_cpus=$(cat /sys/module/nitro_enclaves/parameters/ne_cpus | \
+        sed "s/,/\\n/g" | sed "s/-/ /g" | \
+        while read a b; do [[ -n $b ]] && seq $a $b || echo $a; done | \
+        wc -w
+    )
+
+    [[ $enclave_cpus -gt 0 ]] || {
+        say_err "Enclave CPUs and memory haven't been reserved."
+        echo "$help" 1>&2
+        exit 1
+    }
+}
+
 # Keep p11-kit client-side configuration in sync with the current
 # eVault enclave vsock CID.
 #
 create_pkcs11_config() {
     local cid
     cid=$(nitro-cli describe-enclaves | jq '.[] | .EnclaveCID')
-    ok_or_die "Cannot get eVault enclave CID."
+    [[ -n "$cid" ]] || "Cannot get eVault enclave CID."
 
+    local conf
     conf="remote:vsock:cid=$cid;port=$EVAULT_P11KIT_PORT"
     conf="$conf\nmodule:$EVAULT_BIN_P11_MOD"
 
@@ -230,10 +252,11 @@ cmd_start() {
 
     ensure_nitro_cli
     ensure_eif
+    ensure_enclave_resources
     ensure_vsock_proxy
 
-    cpu_count=$DEFAULT_CPU_COUNT
-    memory=$DEFAULT_MEM_MIB
+    local cpu_count=$DEFAULT_CPU_COUNT
+    local memory=$DEFAULT_MEM_MIB
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -244,16 +267,12 @@ cmd_start() {
         shift
     done
 
-    # Check if eVault is already running
+    # Check if an enclave is already running.
     local id
     id=$(nitro-cli describe-enclaves | jq -r '.[] | .EnclaveID')
     if [ ! -z "$id" ]; then
-        die "The eVault enclave is already running."
+        die "An enclave is already running."
     fi
-
-    # Configure the nitro-cli environment
-    nitro-cli-config -t "$cpu_count" -m "$memory"
-    ok_or_die "Cannot initialize the nitro-cli environment."
 
     # Spawn the eVault enclave
     nitro-cli run-enclave \
@@ -261,7 +280,8 @@ cmd_start() {
         --memory "$memory" \
         --eif-path "$(evault_eif_path)" \
             > /dev/null 2>&1
-    ok_or_die "Cannot start the eVault enclave"
+    ok_or_die "Cannot start the eVault enclave." \
+        "Have enough resources been allocated via nitro-cli-config?"
 
     say "Successfully started the eVault enclave."
 
@@ -304,8 +324,10 @@ execute_rpc() {
         die "Bad execute_rpc() call."
     fi
 
-    local rpc_request="$1"
-    local rpc_addr="$(evault_rpc_server_addr)"
+    local rpc_request
+    local rpc_addr
+    rpc_request="$1"
+    rpc_addr="$(evault_rpc_server_addr)"
     [[ -n $rpc_addr ]] || die "The eVault enclave is not running."
 
     # Execute the RPC
@@ -321,9 +343,9 @@ execute_rpc() {
 cmd_init-token() {
     ensure_aws_creds
 
-    key_db=
-    label=
-    pin=
+    local key_db=
+    local label=
+    local pin=
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --key-db) key_db="$2"; shift ;;
@@ -333,6 +355,7 @@ cmd_init-token() {
         esac
         shift
     done
+    [[ -n "$key_db" ]] || die "Error: missing key database."
     [[ -r "$key_db" ]] || die "Error: key database \"$key_db\" is not a readable file."
     [[ -n "$label" ]] || die "Error: missing token label."
     [[ -n "$pin" ]] || die "Error: missing token PIN."
@@ -371,8 +394,8 @@ cmd_init-token() {
 cmd_refresh-token() {
     ensure_aws_creds
 
-    label=
-    pin=
+    local label=
+    local pin=
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --label) label="$2"; shift ;;
@@ -413,8 +436,8 @@ cmd_refresh-token() {
 #
 cmd_release-token() {
 
-    label=
-    pin=
+    local label=
+    local pin=
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --label) label="$2"; shift ;;
@@ -458,8 +481,8 @@ cmd_describe-device() {
 #
 cmd_describe-token() {
 
-    label=
-    pin=
+    local label=
+    local pin=
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --label) label="$2"; shift ;;
@@ -488,15 +511,22 @@ cmd_describe-token() {
 main() {
 
     if [ "$#" -eq 0 ]; then
-        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+        cmd_help
+        exit 1
     fi
 
-    cmd="$1"
-
-    declare -f "cmd_$cmd" > /dev/null
-    ok_or_die "Unknown command: $1. Please use \`$MY_NAME help\` for help."
-
-    cmd_"$@"
+    local cmd="$1"
+    case "$1" in
+        -h|--help)
+            cmd_help
+            exit 1
+            ;;
+        *)
+            declare -f "cmd_$cmd" > /dev/null
+            ok_or_die "Unknown command: $1. Please use \`$MY_NAME help\` for help."
+            cmd_"$@"
+            ;;
+    esac
 }
 
 main "${@}"

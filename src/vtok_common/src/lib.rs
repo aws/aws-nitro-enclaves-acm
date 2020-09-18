@@ -16,7 +16,7 @@ pub mod defs {
     /// PKCS#11 provider description, as reported by vtok_p11.
     pub const DEVICE_DESCRIPTION: &str = "nitro-evault";
     /// Maximum number of slots/tokens exposed by our PKCS#11 provider.
-    pub const DEVICE_MAX_SLOTS: usize = 32;
+    pub const DEVICE_MAX_SLOTS: usize = 4;
 
     /// PKCS#11 provider slot description.
     pub const SLOT_DESCRIPTION: &str = "evault-slot";

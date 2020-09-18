@@ -246,9 +246,10 @@ build_nitro_cli() {
     ok_or_die "Error creating nitro-cli temp install dir: $install_dir"
 
     # Build & install nitro-cli to our temp install dir
+    local nitro_cli_ver=d89874cc0e3899d4966bb75a875aab5deb8c6273
     pushd "$src_dir" \
         && git fetch origin \
-        && git reset --hard d89874cc0e3899d4966bb75a875aab5deb8c6273 \
+        && git reset --hard $nitro_cli_ver \
         && make nitro-cli vsock-proxy \
         && NITRO_CLI_INSTALL_DIR="$install_dir" make install-tools \
         && popd
@@ -265,7 +266,14 @@ build_nitro_cli() {
     install -D -m 0755 \
         "$src_dir/config/nitro-cli-config" \
         "$install_dir/usr/bin/nitro-cli-config"
-    ok_or_die "nitro-cli temp install failed."
+    ok_or_die "nitro-cli temp install failed: nitro-cli-config"
+
+    # TODO: move hello to the nitro-cli repo and fix this install.
+    # Install the nitro-cli hello example
+    install -D -m 0644 \
+        "$EVAULT_SRC_DIR/env/parent/hello/Dockerfile" \
+        "$install_dir/opt/nitro_cli/hello/Dockerfile"
+    ok_or_die "nitro-cli temp install failed: hello"
 }
 
 build_parent_ctr() {
@@ -534,7 +542,7 @@ cmd_simulate-enclave() {
     ensure_enclave_ctr
 
     local ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
-    [[ $? = 0 ]] \
+    [[ -n $ctr_id ]] \
         && die "An enclave container is already running with id $ctr_id." \
             "Kill it, then try again."
 
@@ -572,7 +580,7 @@ cmd_simulate-parent() {
     ok_or_die "Build failed."
 
     local ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
-    if [[ $? -ne q ]]; then
+    if [[ -n $ctr_id ]]; then
         say_warn "Enclave container is not runing. Use \`$0 simulate-enclave\` to start it."
     fi
 

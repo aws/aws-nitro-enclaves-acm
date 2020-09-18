@@ -28,13 +28,16 @@ RUN apk add \
     gcc \
     git \
     go \
-    p11-kit-server \
     perl \
     curl \
     make \
     automake \
     autoconf \
     linux-headers \
+    libtasn1-dev \
+    libffi-dev \
+    gettext-dev \
+    libtool \
     shadow \
     sudo
 
@@ -45,6 +48,19 @@ RUN ln -s /usr/lib /usr/lib64
 
 RUN mkdir -p /build
 WORKDIR /build
+
+ENV P11_KIT_VER=0.23.19
+RUN git clone https://github.com/p11-glue/p11-kit.git \
+	&& cd p11-kit \
+	&& git reset --hard $P11_KIT_VER \
+    && ./autogen.sh \
+    && ./configure \
+        --disable-debug \
+        --prefix=/usr \
+        --sysconfdir=/etc \
+        --with-trust-paths=/etc/pki/anchors \
+    && make -j $(nproc) \
+    && make install
 
 # Build AWS libcrypto
 # TODO: use a tag, once one becomes available.
@@ -182,7 +198,8 @@ RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-nsm-api.g
 
 # AWS Nitro Enclaves SDK
 # TODO: use a tag, once we have one.
-ENV AWS_NE_SDK_VER=711c3f1b7b638c5864e695d3760bcf12c3fdc2f3
+#ENV AWS_NE_SDK_VER=711c3f1b7b638c5864e695d3760bcf12c3fdc2f3
+ENV AWS_NE_SDK_VER=c090a173ea0cb232d604d5cf564a98e68300be22
 RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-sdk-c" \
     && cd aws-nitro-enclaves-sdk-c \
     && cmake \

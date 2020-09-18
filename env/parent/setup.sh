@@ -59,7 +59,7 @@ evault_setup_parent() {
     # installed.
     MY_BUILD_DEPS=($(for dep in "${BUILD_DEPS[@]}"; do rpm -q $dep > /dev/null || echo $dep; done))
     yum install -y "${MY_BUILD_DEPS[@]}" \
-        && yum install -y gnutls-utils jq tar
+        && yum install -y gnutls-utils jq tar p11-kit
     ok_or_die
 
     amazon-linux-extras install -y docker nginx1
@@ -89,6 +89,9 @@ evault_setup_parent() {
                 > /usr/lib/tmpfiles.d/nitro_enclaves.conf
         ok_or_die "Unable to set up nitro enclaves group."
 
+        echo "export NITRO_CLI_BLOBS=/opt/nitro_cli" >> /home/ec2-user/.bashrc \
+            && chown ec2-user /home/ec2-user/.bashrc
+
         echo "KERNEL==\"nitro_enclaves\" \
             SUBSYSTEM==\"misc\" \
             OWNER=\"root\" \
@@ -100,9 +103,7 @@ evault_setup_parent() {
 
     mkdir -p "$THIS_DIR/src" && cd "$THIS_DIR/src"
 
-    # TODO: update to a newer, untagged commit, if we need the pin-source feature.
     # Install pkgconf from sources (AL2 version is too old).
-    # We need it to build p11-kit.
     git clone https://github.com/pkgconf/pkgconf.git \
         && pushd pkgconf \
         && git reset --hard pkgconf-1.7.3 \
@@ -114,18 +115,7 @@ evault_setup_parent() {
     ok_or_die
     popd
 
-    # TODO: remove this once p11-kit becomes available in AL2
-    # Install p11-kit from sources
-    git clone https://github.com/p11-glue/p11-kit.git \
-        && pushd p11-kit \
-        && git reset --hard 0.23.20 \
-        && ./autogen.sh \
-        && ./configure --prefix=/usr --sysconfdir=/etc \
-        && make -j $(nproc) \
-        && make install
-    ok_or_die
-    popd
-
+    # TODO: update to a newer, untagged commit, if we need the pin-source feature.
     # Install libp11 (openssl PKCS#11 engine) from sources
     git clone https://github.com/OpenSC/libp11.git \
         && pushd libp11 \
