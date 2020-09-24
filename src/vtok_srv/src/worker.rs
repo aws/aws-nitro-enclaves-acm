@@ -45,7 +45,9 @@ where
                     envelope_key,
                 } => Self::refresh_token(label, pin, envelope_key),
                 ApiRequest::RemoveToken { label, pin } => Self::remove_token(label, pin),
-                ApiRequest::UpdateToken { label, pin, token } => Self::update_token(label, pin, token),
+                ApiRequest::UpdateToken { label, pin, token } => {
+                    Self::update_token(label, pin, token)
+                }
             });
 
         self.transport
@@ -121,7 +123,11 @@ where
             .slots()
             .iter()
             .enumerate()
-            .filter_map(|(idx, slot)| slot.as_ref().filter(|tok| tok.label == label).map(|tok| (idx, tok)))
+            .filter_map(|(idx, slot)| {
+                slot.as_ref()
+                    .filter(|tok| tok.label == label)
+                    .map(|tok| (idx, tok))
+            })
             .next()
             .ok_or(ApiError::TokenNotFound)?;
         if token.pin != pin {
@@ -277,14 +283,15 @@ where
                 Ok(())
             })?;
 
-        config
-            .save()
-            .map_err(|_| ApiError::InternalError)?;
+        config.save().map_err(|_| ApiError::InternalError)?;
 
         Ok(ApiOk::None)
     }
 
-    fn decrypt_token_keys(encrypted_keys: Vec<schema::PrivateKey>, envelope_key: schema::EnvelopeKey) -> Result<Vec<config::PrivateKey>, schema::ApiError> {
+    fn decrypt_token_keys(
+        encrypted_keys: Vec<schema::PrivateKey>,
+        envelope_key: schema::EnvelopeKey,
+    ) -> Result<Vec<config::PrivateKey>, schema::ApiError> {
         let mut private_keys = Vec::new();
         for key in encrypted_keys {
             private_keys.push(config::PrivateKey {

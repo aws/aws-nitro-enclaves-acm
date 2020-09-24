@@ -1,0 +1,24 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "vtok_agent"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lazy_static = "1.4.0"
+log = { version = "0.4.8", features = ["std"] }
+nix = "0.18"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+serde_json = "1.0"
+vtok_common = { path = "../vtok_common" }
+vtok_rpc = { path = "../vtok_rpc" }
+
+[[bin]]
+name = "vtok-agent"
+path = "src/main.rs"

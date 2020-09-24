@@ -6,8 +6,8 @@ MY_VERSION="1.0"
 MY_NAME="nitro-evault"
 MY_DESC="Nitro eVault management tool"
 
-EVAULT_DATA_DIR="/opt/nitro-evault"
-EVAULT_EIF_NAME="evault.eif"
+EVAULT_DATA_DIR="/usr/share/nitro_enclaves/p11ne"
+EVAULT_EIF_NAME="p11ne.eif"
 EVAULT_EIF_PATH="$EVAULT_DATA_DIR/$EVAULT_EIF_NAME"
 EVAULT_RPC_PORT=10000
 EVAULT_P11KIT_PORT=9999
@@ -164,13 +164,13 @@ ensure_aws_creds() {
 
 ensure_vsock_proxy() {
     # TODO: remove this once we stabilize vsock-proxy.
-    systemctl is-active -q vsock-proxy || {
-        say "vsock-proxy is not running. Trying to bring it up now ..."
-        sudo systemctl start vsock-proxy
+    systemctl is-active -q nitro-enclaves-vsock-proxy || {
+        say "nitro-enclaves-vsock-proxy is not running. Trying to bring it up now ..."
+        sudo systemctl start nitro-enclaves-vsock-proxy
         sleep 2
     }
-    systemctl is-active -q vsock-proxy
-    ok_or_die "Failed to start vsock-proxy"
+    systemctl is-active -q nitro-enclaves-vsock-proxy
+    ok_or_die "Failed to start nitro-enclaves-vsock-proxy"
 }
 
 ensure_enclave_resources() {
