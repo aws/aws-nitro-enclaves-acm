@@ -18,7 +18,7 @@ USAGE="
                                                 - release: set up the release parent AMI;
 "
 
-NITRO_ENCLAVES_GROUP=awsne
+NITRO_ENCLAVES_GROUP=ne
 THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
 OPT_TARGET=
 
@@ -74,8 +74,7 @@ evault_setup_parent() {
     ok_or_die "Pre-built rootfs install failed."
 
     if evault_is_release_setup; then
-        echo "nitro_enclaves" > /etc/modules-load.d/nitro_enclaves.conf \
-            && systemctl enable docker
+        systemctl enable docker
         ok_or_die "Error setting up startup services"
 
         # Make sure ec2-user has access to nitro-cli resources
@@ -89,15 +88,12 @@ evault_setup_parent() {
                 > /usr/lib/tmpfiles.d/nitro_enclaves.conf
         ok_or_die "Unable to set up nitro enclaves group."
 
-        echo "export NITRO_CLI_BLOBS=/opt/nitro_cli" >> /home/ec2-user/.bashrc \
-            && chown ec2-user /home/ec2-user/.bashrc
-
         echo "KERNEL==\"nitro_enclaves\" \
             SUBSYSTEM==\"misc\" \
             OWNER=\"root\" \
             GROUP=\"$NITRO_ENCLAVES_GROUP\" \
             MODE=\"0660\"" \
-            > /usr/lib/udev/rules.d/99-nitro-enclaves.rules
+            > /usr/lib/udev/rules.d/99-nitro_enclaves.rules
         ok_or_die "Unable to set up nitro_enclaves udev rule."
     fi
 

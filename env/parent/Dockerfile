@@ -36,7 +36,6 @@ RUN [[ $(id -u) -eq $USER_ID ]] && exit 0; \
 # Set up nitro-cli
 RUN mkdir -p /var/log/nitro_enclaves \
     && chown $USER_ID:$GROUP_ID /var/log/nitro_enclaves
-ENV NITRO_CLI_BLOBS=/opt/nitro_cli
 
 ENV HOME="$CTR_HOME"
 ENV PATH="$PATH:$HOME/.cargo/bin"

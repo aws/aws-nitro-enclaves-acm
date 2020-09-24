@@ -8,9 +8,9 @@ ENCLAVE_CTR_VERSION="1"
 PARENT_CTR_VERSION="1"
 
 MY_NAME="eVault devtool"
-ENCLAVE_CTR="evault-enclave"
+ENCLAVE_CTR="p11ne-enclave"
 ENCLAVE_CTR_IMG="$ENCLAVE_CTR:$ENCLAVE_CTR_VERSION"
-PARENT_CTR="evault-parent"
+PARENT_CTR="p11ne-parent"
 PARENT_CTR_IMG="$PARENT_CTR:$PARENT_CTR_VERSION"
 
 THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -18,11 +18,12 @@ EVAULT_SRC_DIR="$(cd "$THIS_DIR/.." && pwd)"
 EVAULT_BUILD_DIR="$EVAULT_SRC_DIR/build"
 EVAULT_RUN_DIR="$EVAULT_BUILD_DIR/run"
 
-CTR_SRC_DIR="/evault.src"
+CTR_SRC_DIR="/p11ne.src"
 CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_RUN_DIR="$CTR_BUILD_DIR/run"
 CTR_HOME="$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)")"
 
+EVBIN_AGENT=vtok-agent
 EVBIN_RPC_CLIENT=nitro-vtoken
 EVBIN_RPC_SERVER=vtok-srv
 EVBIN_RAND=vtok-rand
@@ -248,7 +249,7 @@ build_nitro_cli() {
     ok_or_die "Error creating nitro-cli temp install dir: $install_dir"
 
     # Build & install nitro-cli to our temp install dir
-    local nitro_cli_ver=d89874cc0e3899d4966bb75a875aab5deb8c6273
+    local nitro_cli_ver=05d52c6dded86c79be08d5d4dd04575cc72c86de
     pushd "$src_dir" \
         && git fetch origin \
         && git reset --hard $nitro_cli_ver \
@@ -256,26 +257,6 @@ build_nitro_cli() {
         && NITRO_CLI_INSTALL_DIR="$install_dir" make install-tools \
         && popd
     ok_or_die "nitro-cli build failed."
-
-    # Install nitro-cli "blobs"
-    find "$src_dir/blobs" -type f | while read path; do
-        local dst_path="$install_dir/opt/nitro_cli/${path##$src_dir/blobs}"
-        install -D -m 0755 "$path" "$dst_path"
-    done
-    ok_or_die "nitro-cli temp install failed."
-
-    # Install nitro-cli-config
-    install -D -m 0755 \
-        "$src_dir/config/nitro-cli-config" \
-        "$install_dir/usr/bin/nitro-cli-config"
-    ok_or_die "nitro-cli temp install failed: nitro-cli-config"
-
-    # TODO: move hello to the nitro-cli repo and fix this install.
-    # Install the nitro-cli hello example
-    install -D -m 0644 \
-        "$EVAULT_SRC_DIR/env/parent/hello/Dockerfile" \
-        "$install_dir/opt/nitro_cli/hello/Dockerfile"
-    ok_or_die "nitro-cli temp install failed: hello"
 }
 
 build_parent_ctr() {
@@ -337,7 +318,7 @@ build_eif() {
 
     # TODO: make really sure that we are not messing up an already existing
     # container image here.
-    local eif_tag="evault-eif-tmp-ctr:latest"
+    local eif_tag="p11ne-eif-tmp-ctr:latest"
     docker build -t "$eif_tag" \
         --build-arg BASE_IMG="$ENCLAVE_CTR_IMG" \
         --build-arg EVBIN_RPC_SERVER="$EVBIN_RPC_SERVER" \
@@ -360,12 +341,12 @@ build_eif() {
         "$PARENT_CTR_IMG" \
         nitro-cli build-enclave \
             --docker-uri "$eif_tag" \
-            --output-file "$CTR_BUILD_DIR/evault.eif" \
+            --output-file "$CTR_BUILD_DIR/p11ne.eif" \
             > "$EVAULT_BUILD_DIR/image-measurements.json"
 
     ok_or_die "EIF build failed."
 
-    say "Built: $EVAULT_BUILD_DIR/evault.eif"
+    say "Built: $EVAULT_BUILD_DIR/p11ne.eif"
     say "Measurements: $EVAULT_BUILD_DIR/image-measurements.json"
 
     docker rmi "$eif_tag" > /dev/null
@@ -385,7 +366,10 @@ build_al2_setup() {
     ok_or_die "eVault parent binaries build failed."
 
     cmd_build dev-image
-    ok_or_die "eVault EIF build failed."
+    ok_or_die "EIF build failed."
+
+    local my_data_dir="/usr/share/nitro_enclaves/p11ne"
+    local my_sysconf_dir="/etc/nitro_enclaves"
 
     pushd "$setup_dir" \
         && install -D -m 0755 \
@@ -398,11 +382,23 @@ build_al2_setup() {
             "$EVAULT_SRC_DIR/tools/evault-db" \
             "install/usr/bin/evault-db" \
         && install -D -m 0644 \
-            "$EVAULT_BUILD_DIR/evault.eif" \
-            "install/opt/nitro-evault/evault.eif" \
+            "$EVAULT_BUILD_DIR/p11ne.eif" \
+            "install${my_data_dir}/p11ne.eif" \
         && install -D -m 0644 \
             "$EVAULT_BUILD_DIR/image-measurements.json" \
-            "install/opt/nitro-evault/image-measurements.json" \
+            "install/${my_data_dir}/image-measurements.json" \
+        && install -D -m 0755 \
+            "$EVAULT_BUILD_DIR/target/release/$EVBIN_AGENT" \
+            "install/usr/bin/$EVBIN_AGENT" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/src/vtok_agent/service/nitro-enclaves-acm.service" \
+            "install/usr/lib/systemd/system/nitro-enclaves-acm.service" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/src/vtok_agent/service/acm.example.yaml" \
+            "install${my_data_dir}/acm.example.yaml" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/src/vtok_agent/service/acm.example.yaml" \
+            "install${my_sysconf_dir}/acm.example.yaml" \
         && install -D -m 0755 \
             "$EVAULT_SRC_DIR/env/parent/setup.sh" \
             "./setup.sh"
@@ -430,7 +426,7 @@ cmd_clean() {
     rm -rf "$EVAULT_BUILD_DIR/al2-setup"
     rm -rf "$EVAULT_BUILD_DIR/al2-setup.tar.gz"
     rm -rf "$EVAULT_BUILD_DIR/aws-nitro-enclaves-cli"
-    rm -rf "$EVAULT_BUILD_DIR/evault.eif"
+    rm -rf "$EVAULT_BUILD_DIR/p11ne.eif"
     rm -rf "$EVAULT_BUILD_DIR/image-measurements.json"
 }
 
@@ -452,6 +448,9 @@ cmd_build() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            "$EVBIN_AGENT")
+                parent_bins+=("$EVBIN_AGENT")
+                ;;
             "$EVBIN_RPC_CLIENT")
                 parent_bins+=("$EVBIN_RPC_CLIENT")
                 ;;
@@ -475,7 +474,7 @@ cmd_build() {
                 p11_mod=y
                 ;;
             parent-bins)
-                parent_bins=("$EVBIN_RPC_CLIENT")
+                parent_bins=("$EVBIN_AGENT" "$EVBIN_RPC_CLIENT")
                 ;;
             al2-setup)
                 al2_setup=y
@@ -504,11 +503,8 @@ cmd_build() {
             --workdir "$CTR_SRC_DIR" \
             "$ENCLAVE_CTR_IMG" \
             cargo build "${cargo_args[@]}" --bin "$ev_bin"
-        if [[ $? -eq 0 ]]; then
-            say "Built: $bin_dir/$ev_bin"
-        else
-            say_err "$ev_bin build failed."
-        fi
+        ok_or_die "$ev_bin failed"
+        say "Built: $bin_dir/$ev_bin"
     done
 
     # Build parent-instance-side binaries
@@ -519,11 +515,8 @@ cmd_build() {
             --workdir "$CTR_SRC_DIR" \
             "$PARENT_CTR_IMG" \
             cargo build "${cargo_args[@]}" --bin "$ev_bin"
-        if [[ $? -eq 0 ]]; then
-            say "Built: $bin_dir/$ev_bin"
-        else
-            say_err "$ev_bin build failed."
-        fi
+        ok_or_die "$ev_bin build failed"
+        say "Built: $bin_dir/$ev_bin"
     done
 
     # Build the eVault PKCS#11 provider dynlib
@@ -534,11 +527,8 @@ cmd_build() {
             --workdir "$CTR_SRC_DIR" \
             "$ENCLAVE_CTR_IMG" \
             cargo build "${cargo_args[@]}" --lib
-        if [[ $? -eq 0 ]]; then
-            say "Built: $bin_dir/$EVBIN_P11_MOD"
-        else
-            say_err "$EVBIN_P11_MOD build failed."
-        fi
+        ok_or_die "$EVBIN_P11_MOD build failed."
+        say "Built: $bin_dir/$EVBIN_P11_MOD"
     fi
 
     # Build the eVault EIF image
@@ -608,10 +598,10 @@ cmd_simulate-parent() {
         "$PARENT_CTR_IMG" \
         sh -c "
             echo \"remote:unix:path=$CTR_RUN_DIR/p11kit.sock\" \
-                | sudo tee /etc/pkcs11/modules/evault.module > /dev/null
+                | sudo tee /etc/pkcs11/modules/vtok.module > /dev/null
             echo \"module:$EVBIN_P11_MOD\" \
-                | sudo tee -a /etc/pkcs11/modules/evault.module > /dev/null
-            PS1=\"[$USER@evault-parent \\W] \" \
+                | sudo tee -a /etc/pkcs11/modules/vtok.module > /dev/null
+            PS1=\"[$USER@vtok-parent \\W] \" \
                 PATH=\"\$PATH:$CTR_BUILD_DIR/target/debug:$CTR_SRC_DIR/tools\" bash
         "
 }

@@ -127,7 +127,7 @@ pub mod schema {
             KmsDecryptFailed,
         }
 
-        #[derive(Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub enum EnvelopeKey {
             Kms {
                 region: String,
@@ -137,14 +137,14 @@ pub mod schema {
             },
         }
 
-        #[derive(Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub struct PrivateKey {
             pub encrypted_pem_b64: String,
             pub id: u8,
             pub label: String,
         }
 
-        #[derive(Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub struct Token {
             pub label: String,
             pub pin: String,
@@ -152,14 +152,14 @@ pub mod schema {
             pub keys: Vec<PrivateKey>,
         }
 
-        #[derive(Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub struct PrivateKeyDescription {
             pub label: String,
             pub id: u8,
             pub uri: String,
         }
 
-        #[derive(Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub struct TokenDescription {
             pub label: String,
             pub slot_id: usize,
@@ -168,7 +168,7 @@ pub mod schema {
             pub keys: Option<Vec<PrivateKeyDescription>>,
         }
 
-        #[derive(Debug, Deserialize, Serialize)]
+        #[derive(Clone, Debug, Deserialize, Serialize)]
         pub struct DeviceDescription {
             pub free_slot_count: usize,
             pub tokens: Vec<TokenDescription>,
