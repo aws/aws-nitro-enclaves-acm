@@ -2,50 +2,50 @@
 # Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Test tool. Used for smoke-testing an eVault enclave.
+# Right now user should copy the following on an EC2 instance
+# - the tests directory from the eVault repo
+# - the testhelpers binary in the tests directory (pre-built in the eVault repo)
+# /home/ec2-user/tests/testtool
+# /home/ec2-user/tests/testhelpers
+# ...
+#
+# With a role attached and a KMS key created beforehand run `./testtool openssl [...]`
+
+MY_NAME="testtool"
+
 # Test specific
 RESULT_DIR="tests/results"
 OVERALL_LOG_FILE="$RESULT_DIR/logs"
-HELPER_PATH="./build/target/debug/testhelpers"
+HELPER_PATH="tests/testhelpers" # Same level as this script
 TEST_LARGE_FILE_SIZES="0 32 256 1024 4096 16000"
 TEST_SMALL_FILE_SIZES="1 2 4 8 16 32 64 128"
 TEST_ECDSA_FILE_SIZES="1 2 4 8 16 32 55"
 TEST_RSAPSS_SALT_SIZES="0 1 2 4 16 48 64"
 TEST_DIGESTS="sha1 sha224 sha256 sha384 sha512"
 
-# PKCS Library specific
-PKCS_LIB_PATH="./build/target/debug/libvtok_rs.so"
+# Test specifics
 PIN="1234"
-URI_TOKEN="pkcs11:model=Nitro-vToken;manufacturer=Amazon;serial=EVT00;token=EncryptionVault-Token;pin-value=$PIN"
+KEYID="%01"
+TOKEN_LABEL="test-token"
+URI_TOKEN="pkcs11:model=evault-token;manufacturer=Amazon;serial=EVT00;token=$TOKEN_LABEL;pin-value=$PIN;id=$KEYID"
 KEYS_DIR="./tests/keys/"
-RSA_KEYS="rsa1024 rsa2048 rsa4096 rsa8192"
-ECDSA_KEYS="secp224r1 secp384r1 secp521r1 prime256v1"
+KEY_DB_DIR="tests/db"
+RSA_KEYS="rsa1024 rsa2048 rsa4096"
+ECDSA_KEYS="secp384r1 secp521r1 prime256v1"
 
 # Exit codes
 EXIT_CODE_INVALID_PARAMS=1
 EXIT_CODE_FAILED_TESTS=2
 
-
 USAGE="\
-Testtool
-Usage: $(basename "$0") [options] <testset>
-
-Options:
-
-   --seed <seed>
-         Specify the seed used for random file content generation
+testtool
 
 Test sets:
-
-   openssl
-         This test set uses openssl for performing the operations with
-         the PKCS library.
-   pkcs11tool
-         This test set uses pkcs11tool for performing the operations with
-         the PKCS library.
-openssl This test set performs all the operations using openssl. Most accurate test set but does not cover all the mechanisms.  
-   all
-         Run all the above tests
-
+    openssl         	This test set uses openssl for performing the operations with the PKCS library.
+                        It provisions internally beforehand.
+        --kms-key-id  	User KMS CMK for encrypting the provisioned content.
+        --kms-region   	User IMDS region.
 "
 
 # Option to skip regeneration of file
@@ -98,7 +98,7 @@ create_test_dir() {
 
 get_size_humanreadable() {
     local filesize="$1"
-    numfmt --to=iec-i --suffix=B --format="%.1f" "$filesize"
+    numfmt --to=iec-i --suffix=B --format="%1f" "$filesize"
 }
 
 get_key_file() {
@@ -112,7 +112,6 @@ get_key_pkcs_uri() {
     local keytype="$2" # public/private
     echo "${URI_TOKEN};object=${keylabel};type=${keytype}"
 }
-
 
 log_test_result() {
     local testname="$1"
@@ -193,40 +192,6 @@ openssl_pkcs_digestverify_rsa() {
     openssl dgst "-$digest" -keyform engine -engine pkcs11 \
         -verify "$(get_key_pkcs_uri $keylabel public)" \
         -signature "$sign" "$input"
-
-    return $?
-}
-
-pkcs11tool_digestsign_rsa() {
-    local digest="$1"
-    local input="$2"
-    local outsign="$3"
-    local mechanism="${digest^^}-RSA-PKCS"
-
-    pkcs11-tool --id 1 --sign \
-        --module $PKCS_LIB_PATH \
-        -m "$mechanism" \
-        --input-file "$input" \
-        -o "$outsign" \
-        -p "$PIN"
-
-    return $?
-}
-
-pkcs11tool_digestverify_rsa() {
-    local digest="$1"
-    local input="$2"
-    local sign="$3"
-    local mechanism="${digest^^}-RSA-PKCS"
-
-    local output=$(pkcs11-tool --id 1 --verify \
-        --module $PKCS_LIB_PATH \
-        -m "$mechanism" \
-        --input-file "$input" \
-        --signature-file "$sign" \
-        -p "$PIN" 2>&1)
-    echo "$output"
-    echo "$output" | grep 'Signature is valid'
 
     return $?
 }
@@ -355,44 +320,6 @@ openssl_pkcs_digestverify_rsapss() {
     return $?
 }
 
-pkcs11tool_digestsign_rsapss() {
-    local digest="$1"
-    local saltlen="$2"
-    local input="$3"
-    local outsign="$4"
-    local mechanism="${digest^^}-RSA-PKCS-PSS"
-
-    pkcs11-tool --id 1 --sign \
-        --module $PKCS_LIB_PATH \
-        -m "$mechanism" \
-        --salt-len "$saltlen" \
-        --input-file "$input" \
-        -o "$outsign" \
-        -p "$PIN"
-
-    return $?
-}
-
-pkcs11tool_digestverify_rsapss() {
-    local digest="$1"
-    local saltlen="$2"
-    local input="$3"
-    local sign="$4"
-    local mechanism="${digest^^}-RSA-PKCS-PSS"
-
-    local output=$(pkcs11-tool --id 1 --verify \
-        --module $PKCS_LIB_PATH \
-        -m "$mechanism" \
-        --salt-len "$saltlen" \
-        --input-file "$input" \
-        --signature-file "$sign" \
-        -p "$PIN" 2>&1)
-    echo "$output"
-    echo "$output" | grep -q 'Signature is valid'
-
-    return $?
-}
-
 # Sign&Verify ECDSA Helpers
 
 openssl_pkcs_sign_ecdsa() {
@@ -400,11 +327,10 @@ openssl_pkcs_sign_ecdsa() {
     local input="$2"
     local outsign="$3"
 
-    openssl pkeyutl -sign \
+    openssl dgst \
         -keyform engine -engine pkcs11 \
-        -inkey "$(get_key_pkcs_uri $keylabel private)" \
-        -out "$outsign" \
-        -in "$input"
+        -sign "$(get_key_pkcs_uri $keylabel private)" \
+        -out "$outsign" "$input"
 
     return $?
 }
@@ -414,11 +340,10 @@ openssl_pkcs_verify_ecdsa() {
     local input="$2"
     local sign="$3"
 
-    openssl pkeyutl -verify \
+    openssl dgst \
         -keyform engine -engine pkcs11 \
-        -pubin -inkey "$(get_key_pkcs_uri $keylabel public)" \
-        -sigfile "$sign" \
-        -in "$input"
+        -verify "$(get_key_pkcs_uri $keylabel public)" \
+        -signature "$sign" "$input"
 
     return $?
 }
@@ -428,10 +353,9 @@ openssl_ref_sign_ecdsa() {
     local input="$2"
     local outsign="$3"
 
-    openssl pkeyutl -sign \
-        -inkey "$(get_key_file $keylabel private)" \
-        -out "$outsign" \
-        -in "$input"
+    openssl dgst -sign \
+         "$(get_key_file $keylabel private)" \
+	"$input" > "$outsign"
 
     return $?
 }
@@ -441,10 +365,9 @@ openssl_ref_verify_ecdsa() {
     local input="$2"
     local sign="$3"
 
-    openssl pkeyutl -verify \
-        -pubin -inkey "$(get_key_file $keylabel public)" \
-        -sigfile "$sign" \
-        -in "$input"
+    openssl dgst \
+        -verify "$(get_key_file $keylabel public)" \
+        -signature "$sign" "$input"
 
     return $?
 }
@@ -575,125 +498,6 @@ openssl_ref_decrypt_rsax509() {
 
 # Tests
 
-test_pkcs11tool_digestsignverify_rsapss() {
-    local filesize="$1"
-    local digest="$2"
-    local saltlen="$3"
-
-    local filesize_humanreadable=$(get_size_humanreadable $filesize)
-    local testname="test_pkcs11tool_digestsignverify_rsapss_${digest}_sLen${saltlen}_${filesize_humanreadable}"
-    local test_dir=$(create_test_dir $testname signverify)
-    local inputpath="$test_dir/input"
-    local corruptedinputpath="$test_dir/input_corrupted"
-    local logfile="$test_dir/logs"
-    local pkcssign_path="$test_dir/input.libsig"
-    local refsign_path="$test_dir/input.refsig"
-
-    {
-        echo "Running test ${FUNCNAME[0]} $@" &&
-
-        echo "Creating input file with size $filesize, path $inputpath" &&
-        create_test_random_file "$inputpath" "$filesize" &&
-
-        if [ "$filesize" -gt 0 ] ; then
-            echo "Corrupting input file" &&
-            bitflip "$inputpath" "$corruptedinputpath" 0 $((8*$filesize)) &&
-            (! diff "$inputpath" "$corruptedinputpath")
-        fi &&
-
-        echo "PKCS Module - Signing using RSA-PSS the file:$inputpath saltlen:$saltlen" &&
-        pkcs11tool_digestsign_rsapss "$digest" "$saltlen" "$inputpath" "$pkcssign_path" &&
-
-        echo "Openssl - Signing using RSA-PSS the file:$inputpath saltlen $saltlen" &&
-        openssl_ref_digestsign_rsapss "$digest" "$saltlen" "$inputpath" "$refsign_path" &&
-
-        if [ "$saltlen" -eq 0 ] ; then
-            echo "Checking that the resulting files are identical as no salt is used" &&
-            diff "$pkcssign_path" "$refsign_path"
-        else
-            echo "Skiping signature check as the signature contains file"
-        fi &&
-
-        echo "Checking that the PKCS signature can be verified using openssl" &&
-        openssl_ref_digestverify_rsapss "$digest" "$saltlen" "$inputpath" "$pkcssign_path" &&
-
-        echo "Checking that the openssl signature can be verified using pkcs module" &&
-        pkcs11tool_digestverify_rsapss "$digest" "$saltlen" "$inputpath" "$refsign_path" &&
-
-        if [ "$filesize" -gt 0 ] ; then
-            echo "Checking that the PKCS signature can not be verified" \
-                "against corrupted input using openssl" &&
-            (! openssl_ref_digestverify_rsapss "$digest" "$saltlen" "$corruptedinputpath" "$pkcssign_path") &&
-
-            echo "Checking that the openssl signature can not be verified" \
-                "against corrupted input using pkcs11 module" &&
-            (! pkcs11tool_digestverify_rsapss "$digest" "$saltlen" "$corruptedinputpath" "$refsign_path")
-        fi
-
-    } >$logfile 2>&1
-    exitcode=$?
-
-
-    log_test_result "$testname" "$exitcode"
-}
-
-test_pkcs11tool_digestsignverify_rsa() {
-    local filesize="$1"
-    local digest="$2"
-
-    local filesize_humanreadable=$(get_size_humanreadable $filesize)
-    local testname="test_pkcs11tool_digestsignverify_rsa_${digest}_${filesize_humanreadable}"
-    local test_dir=$(create_test_dir $testname signverify)
-    local inputpath="$test_dir/input"
-    local corruptedinputpath="$test_dir/input_corrupted"
-    local logfile="$test_dir/logs"
-    local pkcssign_path="$test_dir/input.libsig"
-    local refsign_path="$test_dir/input.refsig"
-
-    {
-        echo "Running test ${FUNCNAME[0]} $@" &&
-
-        echo "Creating input file with size $filesize, path $inputpath" &&
-        create_test_random_file "$inputpath" "$filesize" &&
-
-        if [ "$filesize" -gt 0 ] ; then
-            echo "Corrupting input file" &&
-            bitflip "$inputpath" "$corruptedinputpath" 0 $((8*$filesize)) &&
-            (! diff "$inputpath" "$corruptedinputpath")
-        fi &&
-
-        echo "PKCS Module - Signing the file:$inputpath" &&
-        pkcs11tool_digestsign_rsa "$digest" "$inputpath" "$pkcssign_path" &&
-
-        echo "Openssl - Signing using RSA the file:$inputpath" &&
-        openssl_ref_digestsign_rsa "$digest" "$inputpath" "$refsign_path" &&
-
-        echo "Checking that the resulting files are identical" &&
-        diff "$pkcssign_path" "$refsign_path" &&
-
-        echo "Checking that the PKCS signature can be verified using openssl" &&
-        openssl_ref_digestverify_rsa "$digest" "$inputpath" "$pkcssign_path" &&
-
-        echo "Checking that the openssl signature can be verified using pkcs module" &&
-        pkcs11tool_digestverify_rsa "$digest" "$inputpath" "$refsign_path" &&
-
-        if [ "$filesize" -gt 0 ] ; then
-            echo "Checking that the PKCS signature can not be verified" \
-                "against corrupted input using openssl" &&
-            (! openssl_ref_digestverify_rsa "$digest" "$corruptedinputpath" "$pkcssign_path") &&
-
-            echo "Checking that the openssl signature can not be verified" \
-                "against corrupted input using pkcs11 module" &&
-            (! pkcs11tool_digestverify_rsa "$digest" "$corruptedinputpath" "$refsign_path")
-        fi
-
-    } >$logfile 2>&1
-    exitcode=$?
-
-
-    log_test_result "$testname" "$exitcode"
-}
-
 generate_test_name() {
     local IFS="_"
     echo "$*"
@@ -735,7 +539,7 @@ testtemplate_generate_check() {
 
         if [ "$filesize" -gt 0 ] ; then
             echo "Corrupting input file" &&
-            bitflip "$inputpath" "$corruptedinputpath" 0 $((8*$filesize)) &&
+            bitflip "$inputpath" "$corruptedinputpath" 0 $((8* $filesize)) &&
             (! diff "$inputpath" "$corruptedinputpath")
         fi &&
 
@@ -767,6 +571,7 @@ testtemplate_generate_check() {
     } >$logfile 2>&1
     exitcode=$?
 
+    echo $testname
     log_test_result "$testname" "$exitcode"
 }
 
@@ -853,8 +658,8 @@ test_openssl_signverify_ecdsa() {
     testtemplate_generate_check \
         "${FUNCNAME[0]}" \
         "signverify/ecdsa/${keylabel}" \
-        openssl_pkcs_sign_ecdsa openssl_ref_sign_ecdsa \
-        openssl_pkcs_verify_ecdsa openssl_ref_verify_ecdsa \
+       openssl_pkcs_sign_ecdsa openssl_ref_sign_ecdsa \
+       openssl_pkcs_verify_ecdsa openssl_ref_verify_ecdsa \
         true \
         create_test_random_file \
         "$filesize" "$keylabel"
@@ -896,135 +701,227 @@ test_openssl_encryptdecrypt_rsa_x509() {
         "$filesize" "$keylabel"
 }
 
+# Prepare test environment
+prepare_test_env() {
 
-# Test sets
+    # TODO: Create role, attach it, create kms key
 
-test_pkcs11tool_all() {
-    echo "Running tests using pkcs11-tool"
-    echo "Note: these tests should only be run when the pkcs library is " \
-        "compiled using libcrypto from openssl"
-    echo "These tests should fail with boringssl implementation"
+    mkdir -p "$KEY_DB_DIR"
+    ok_or_die "Cannot create test key database directory."
 
-    echo "Running RSA-PSS Digest&Sign tests using pkcs11-tool"
-    for fsize in $TEST_LARGE_FILE_SIZES ; do
-        for digest in $TEST_DIGESTS ; do
-            for slen in $TEST_RSAPSS_SALT_SIZES ; do
-                test_pkcs11tool_digestsignverify_rsapss $fsize $digest $slen
-            done
-        done
-    done
+    # Initialize the evault enclave
+    nitro-evault start > /dev/null 2>&1
+    if [ $? -ne 0 ] ; then
+    # In case previous test was interrupted. Restart the enclave now.
+        nitro-evault stop
+        ok_or_die "Cannot stop the eVault enclave"
 
-    echo "Running RSA Digest&Sign tests using pkcs11-tool"
-    for fsize in $TEST_LARGE_FILE_SIZES ; do
-        for digest in $TEST_DIGESTS ; do
-            test_pkcs11tool_digestsignverify_rsa $fsize $digest
-        done
-    done
+        nitro-evault start
+        ok_or_die "Cannot start the eVault enclave"
+    fi
 }
 
-test_openssl_all() {
-    echo "Running Sign&verify tests"
-    echo "Running RSA-PSS Sign&Verify tests using openssl"
-    for keylabel in $RSA_KEYS ; do
-        for fsize in $TEST_LARGE_FILE_SIZES ; do
-            for digest in $TEST_DIGESTS ; do
-                for slen in $TEST_RSAPSS_SALT_SIZES ; do
-                    test_openssl_digestsignverify_rsapss $fsize $keylabel $slen $digest
-                done
-            done
-        done
-    done
+# Cleanup test environment
+cleanup_test_env() {
 
-    echo "Running RSA Sign&Verify tests using openssl"
-    for keylabel in $RSA_KEYS ; do
-        for fsize in $TEST_LARGE_FILE_SIZES ; do
-            for digest in $TEST_DIGESTS ; do
-                test_openssl_digestsignverify_rsa $fsize $keylabel $digest
-            done
-        done
-    done
+    nitro-evault stop > /dev/null 2>&1
 
-    echo "Running RSA RAW Sign&Verify (x509) tests using openssl"
-    # For raw rsa signature the length of the input file must be equal to
-    # the length of the key
-    test_openssl_signverify_rsa_x509 128 "rsa1024"
-    test_openssl_signverify_rsa_x509 256 "rsa2048"
-    test_openssl_signverify_rsa_x509 512 "rsa4096"
-    test_openssl_signverify_rsa_x509 1024 "rsa8192"
+    rm -rf "$KEY_DB_DIR"
 
-
-    echo "Running ECDSA Sign&Verify tests using openssl"
-    for keylabel in $ECDSA_KEYS ; do
-        for fsize in $TEST_ECDSA_FILE_SIZES ; do
-            test_openssl_signverify_ecdsa $fsize "$keylabel"
-        done
-    done
-
-    echo "Running Encrypt&Decrypt tests"
-    for keylabel in $RSA_KEYS ; do
-        for fsize in $TEST_SMALL_FILE_SIZES ; do
-            test_openssl_encryptdecrypt_rsa $fsize $keylabel
-        done
-    done
-    echo "Running RSA RAW Encrypt&Decrypt (x509) tests using openssl"
-    test_openssl_encryptdecrypt_rsa_x509 128 "rsa1024"
-    test_openssl_encryptdecrypt_rsa_x509 256 "rsa2048"
-    test_openssl_encryptdecrypt_rsa_x509 512 "rsa4096"
-    test_openssl_encryptdecrypt_rsa_x509 1024 "rsa8192"
+    # TODO: Destroy kms key, detach role, destroy role
 }
 
-# Main
+# Provision test token with test key
+provision_key() {
+    if [ "$#" -ne 6 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
 
-main() {
-    # Change working directory to Encryption Vault root
-    cd "$(dirname "$0")/.."
-    mkdir -p "$RESULT_DIR"
-
-    run_openssl=0
-    run_pkcs11tool=0
-
-    # Process options
-    while grep '^--' <(echo "$1") ; do
-        if [ "$1" = "--seed" ] ; then
-            shift
-            prng_seed="$1"
-        fi
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --kms-key-id) key_id="$2"; shift ;;
+            --kms-region) region="$2"; shift ;;
+            --key-label) keylabel="$2"; shift;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
         shift
     done
 
-    testset="$1"
-    echo "Running testset $testset"
-    if [ -z "$testset" ]; then
-        echo "$USAGE"
-        exit $EXIT_CODE_INVALID_PARAMS
+    # Initialize a token with one key type
+    evault-db pack-key --id 1 --label testkey --key-file "$(get_key_file "$keylabel" private)" --out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
+    ok_or_die "Cannot pack nitro-evault token test key."
+
+    nitro-evault init-token --key-db "$KEY_DB_DIR/$keylabel.db" --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+
+    return 0
+}
+
+# Release test token
+cleanup_key() {
+    if [ "$#" -ne 2 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
     fi
 
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --key-label) keylabel="$2"; shift;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+    nitro-evault release-token --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+}
+
+# Openssl
+
+cmd_openssl() {
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --kms-key-id) key_id="$2"; shift ;;
+            --kms-region) region="$2"; shift ;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+    prepare_test_env
+
+    for rsa_key in $RSA_KEYS ; do
+	    provision_keys --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
+        ok_or_die "Cannot provision openssl test keys."
+
+    	echo "Running Sign&verify tests"
+    	echo "Running RSA-PSS Sign&Verify tests using openssl"
+
+       	for fsize in $TEST_LARGE_FILE_SIZES ; do
+            for digest in $TEST_DIGESTS ; do
+                for slen in $TEST_RSAPSS_SALT_SIZES ; do
+                    test_openssl_digestsignverify_rsapss $fsize $rsa_key $slen $digest
+                done
+            done
+        done
+
+        echo "Running RSA Sign&Verify tests using openssl"
+        for fsize in $TEST_LARGE_FILE_SIZES ; do
+            for digest in $TEST_DIGESTS ; do
+                test_openssl_digestsignverify_rsa $fsize $rsa_key $digest
+            done
+        done
+
+        echo "Running RSA RAW Sign&Verify (x509) tests using openssl"
+        # For raw rsa signature the length of the input file must be equal to
+        # the length of the key
+        if [ "$rsa_key" == "rsa1024" ] ; then
+            test_openssl_signverify_rsa_x509 128 "rsa1024"
+        elif [ "$rsa_key" == "rsa2048" ] ; then
+            test_openssl_signverify_rsa_x509 256 "rsa2048"
+        elif [ "$rsa_key" == "rsa4096" ] ; then
+            test_openssl_signverify_rsa_x509 512 "rsa4096"
+        fi
+
+        cleanup_keys --key-label "$rsa_key"
+    done
+
+    echo "Running ECDSA Sign&Verify tests using openssl"
+    for ec_key in $ECDSA_KEYS ; do
+        provision_keys --kms-key-id "$key_id" --kms-region "$region" --key-label "$ec_key"
+
+        for fsize in $TEST_ECDSA_FILE_SIZES ; do
+            test_openssl_signverify_ecdsa $fsize $ec_key
+        done
+
+        cleanup_keys --key-label "$ec_key"
+    done
+
+    echo "Running Encrypt&Decrypt tests"
+    for rsa_key in $RSA_KEYS ; do
+        provision_keys --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
+
+        for fsize in $TEST_SMALL_FILE_SIZES ; do
+            test_openssl_encryptdecrypt_rsa $fsize $rsa_key
+        done
+
+        echo "Running RSA RAW Encrypt&Decrypt (x509) tests using openssl"
+
+	if [ "$rsa_key" == "rsa1024" ] ; then
+        test_openssl_encryptdecrypt_rsa_x509 128 "rsa1024"
+	elif [ "$rsa_key" == "rsa2048" ] ; then
+        test_openssl_encryptdecrypt_rsa_x509 256 "rsa2048"
+	elif [ "$rsa_key" == "rsa4096" ] ; then
+        test_openssl_encryptdecrypt_rsa_x509 512 "rsa4096"
+	fi
+
+        cleanup_keys --key-label "$rsa_key"
+    done
+
+    cleanup_test_env
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit "$code"
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Send a text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+cmd_help() {
+    echo "$USAGE"
+}
+
+# Main
+main() {
+    if [ "$#" -eq 0 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    local cmd="$1"
+
+    declare -f "cmd_$cmd" > /dev/null
+    ok_or_die "Unknown command: $1. Please use \`$0 help\` for help."
+
+    # Change working directory to Encryption Vault root
+    cd "$(dirname "$0")/.."
+    ok_or_die "Cannot change working directory"
+
+    mkdir -p "$RESULT_DIR"
+
     {
-        if [ "$prng_seed" = "none" ] ; then
-            prng_seed=$RANDOM
-            echo "No seed specified. Generating seed"
-        fi
-        echo "Using $prng_seed as seed"
+        prng_seed=$RANDOM
 
+        # Run test case
+        cmd_"$@"
 
-        if [ "$testset" = "all" ] ; then
-            test_pkcs11tool_all
-            test_openssl_all
-        elif [ "$testset" = "pkcs11tool" ] ; then
-            test_pkcs11tool_all
-        elif [ "$testset" = "openssl" ] ; then
-            test_openssl_all
-        else
-            echo "$USAGE"
-            exit $EXIT_CODE_INVALID_PARAMS
-        fi
-
-        test_results_summary
-        if [ "$num_tests_failed" -ne 0 ] ; then
-            exit $EXIT_CODE_FAILED_TESTS
+        # Print test case summary
+        if [ "$*" != "help" ] ; then
+            test_results_summary
+            if [ "$num_tests_failed" -ne 0 ] ; then
+                exit $EXIT_CODE_FAILED_TESTS
+            fi
         fi
     } | tee $OVERALL_LOG_FILE
-
 }
 
 main "${@}"
