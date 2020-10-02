@@ -67,7 +67,7 @@ cmd_pack-key() {
             --arg a "$enc_key" \
             --arg b "$id" \
             --arg c "$label" \
-            '{encrypted_pem_b64: $a, id: $b | tonumber, label: $c}' )
+            '[{encrypted_pem_b64: $a, id: $b | tonumber, label: $c}]' )
     ok_or_die "Cannot format the input key."
 
     echo "$out_data" > "$out_file.db"
@@ -108,7 +108,8 @@ cmd_help() {
 
 main() {
     if [ "$#" -eq 0 ]; then
-        die "Invalid arguments. Please use \`$0 help\` for help."
+        cmd_help
+        exit 1
     fi
 
     local cmd="$1"

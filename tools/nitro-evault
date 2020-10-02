@@ -380,7 +380,7 @@ cmd_init-token() {
             --arg b "$pin" \
             --argjson c "$envelope_key" \
             --argjson d "$keys" \
-            '{AddToken: {token: {label: $a, pin: $b, envelope_key: $c, keys: [ $d ]}}}')
+            '{AddToken: {token: {label: $a, pin: $b, envelope_key: $c, keys: $d }}}')
     ok_or_die "Cannot construct eVault token initialization message."
 
     # Execute RPC
