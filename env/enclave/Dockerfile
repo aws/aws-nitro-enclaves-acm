@@ -22,6 +22,7 @@ ENV RUSTFLAGS="-C target-feature=-crt-static"
 
 # Install system dependencies / packages.
 RUN apk add \
+    p11-kit-server \
     ca-certificates \
     cmake \
     g++ \
@@ -31,13 +32,7 @@ RUN apk add \
     perl \
     curl \
     make \
-    automake \
-    autoconf \
     linux-headers \
-    libtasn1-dev \
-    libffi-dev \
-    gettext-dev \
-    libtool \
     shadow \
     sudo
 
@@ -48,19 +43,6 @@ RUN ln -s /usr/lib /usr/lib64
 
 RUN mkdir -p /build
 WORKDIR /build
-
-ENV P11_KIT_VER=0.23.19
-RUN git clone https://github.com/p11-glue/p11-kit.git \
-	&& cd p11-kit \
-	&& git reset --hard $P11_KIT_VER \
-    && ./autogen.sh \
-    && ./configure \
-        --disable-debug \
-        --prefix=/usr \
-        --sysconfdir=/etc \
-        --with-trust-paths=/etc/pki/anchors \
-    && make -j $(nproc) \
-    && make install
 
 # Build AWS libcrypto
 # TODO: use a tag, once one becomes available.
