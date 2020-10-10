@@ -45,8 +45,7 @@ RUN mkdir -p /build
 WORKDIR /build
 
 # Build AWS libcrypto
-# TODO: use a tag, once one becomes available.
-ENV AWS_LC_VER=6eabe67472e5e3aa89341d365d5385c3eb6406eb
+ENV AWS_LC_VER="v0.1-beta"
 RUN git clone "https://github.com/awslabs/aws-lc.git" \
     && cd aws-lc \
     && git reset --hard $AWS_LC_VER \
