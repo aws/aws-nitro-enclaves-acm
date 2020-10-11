@@ -45,7 +45,7 @@ where
                     envelope_key,
                 } => Self::refresh_token(label, pin, envelope_key),
                 ApiRequest::RemoveToken { label, pin } => Self::remove_token(label, pin),
-                ApiRequest::UpdateToken { .. } => Err(ApiError::Nyi),
+                ApiRequest::UpdateToken { label, pin, token } => Self::update_token(label, pin, token),
             });
 
         self.transport
@@ -69,40 +69,14 @@ where
             return Err(ApiError::TokenLabelInUse);
         }
 
+        let private_keys = Self::decrypt_token_keys(token.keys, token.envelope_key)?;
+
         // Find the first free slot.
         let free_slot = config
             .slots_mut()
             .iter_mut()
             .find(|s| s.is_none())
             .ok_or(ApiError::TooManyTokens)?;
-
-        let mut private_keys = Vec::new();
-        for key in token.keys {
-            private_keys.push(config::PrivateKey {
-                pem: match token.envelope_key {
-                    schema::EnvelopeKey::Kms {
-                        ref region,
-                        ref access_key_id,
-                        ref secret_access_key,
-                        ref session_token,
-                    } => aws_ne::kms_decrypt(
-                        region.as_bytes(),
-                        access_key_id.as_bytes(),
-                        secret_access_key.as_bytes(),
-                        session_token.as_bytes(),
-                        &base64::decode(key.encrypted_pem_b64.as_str())
-                            .map_err(|_| ApiError::TokenKeyDecodingFailed)?,
-                    )
-                    .map_err(|_| ApiError::KmsDecryptFailed)
-                    .and_then(|v| {
-                        String::from_utf8(v).map_err(|_| ApiError::TokenProvisioningFailed)
-                    })?,
-                },
-                encrypted_pem_b64: key.encrypted_pem_b64,
-                id: key.id,
-                label: key.label,
-            })
-        }
 
         free_slot.replace(config::Token {
             label: token.label,
@@ -121,10 +95,12 @@ where
         let tokens: Vec<schema::TokenDescription> = config
             .slots()
             .iter()
-            .filter_map(|slot| {
+            .enumerate()
+            .filter_map(|(slot_id, slot)| {
                 slot.as_ref().and_then(|tok| {
                     Some(schema::TokenDescription {
                         label: tok.label.clone(),
+                        slot_id,
                         ttl_secs: tok.expiry_ts.checked_sub(util::time::monotonic_secs())?,
                         keys: None,
                     })
@@ -141,10 +117,11 @@ where
 
     fn describe_token(label: String, pin: String) -> ApiResponse {
         let config = config::Config::load_ro().map_err(|_| ApiError::InternalError)?;
-        let token = config
+        let (slot_id, token) = config
             .slots()
             .iter()
-            .filter_map(|slot| slot.as_ref().filter(|tok| tok.label == label))
+            .enumerate()
+            .filter_map(|(idx, slot)| slot.as_ref().filter(|tok| tok.label == label).map(|tok| (idx, tok)))
             .next()
             .ok_or(ApiError::TokenNotFound)?;
         if token.pin != pin {
@@ -153,6 +130,7 @@ where
 
         let token_desc = schema::TokenDescription {
             label: token.label.clone(),
+            slot_id,
             ttl_secs: token
                 .expiry_ts
                 .checked_sub(util::time::monotonic_secs())
@@ -164,6 +142,15 @@ where
                     .map(|key| schema::PrivateKeyDescription {
                         label: key.label.clone(),
                         id: key.id,
+                        uri: format!(
+                            "pkcs11:model={};manufacturer={};serial=EVT{:02X};token={};id=%{:02x};object={};type=private",
+                            defs::TOKEN_MODEL,
+                            defs::MANUFACTURER,
+                            slot_id,
+                            token.label.as_str(),
+                            key.id,
+                            key.label.as_str(),
+                        )
                     })
                     .collect(),
             ),
@@ -250,5 +237,81 @@ where
         config.save().map_err(|_| ApiError::InternalError)?;
 
         Ok(ApiOk::None)
+    }
+
+    fn update_token(label: String, pin: String, token: schema::Token) -> ApiResponse {
+        let mut config = config::Config::load_rw().map_err(|_| ApiError::InternalError)?;
+
+        // If this update is changing the token label, we need to make sure that the
+        // new label is unique.
+        if label != token.label {
+            let dup = config
+                .slots()
+                .iter()
+                .find(|s| s.as_ref().filter(|t| t.label == token.label).is_some())
+                .is_some();
+            if dup {
+                return Err(ApiError::TokenLabelInUse);
+            }
+        }
+
+        config
+            .slots_mut()
+            .iter_mut()
+            .find(|s| match s {
+                None => false,
+                Some(tok) => tok.label == label,
+            })
+            .ok_or(ApiError::TokenNotFound)
+            .and_then(|slot| {
+                // It's safe to unwrap here, since the above find() ensures slot != None
+                if slot.as_ref().unwrap().pin != pin {
+                    return Err(ApiError::AccessDenied);
+                }
+                slot.replace(config::Token {
+                    label,
+                    pin,
+                    expiry_ts: util::time::monotonic_secs() + defs::TOKEN_EXPIRY_SECS,
+                    private_keys: Self::decrypt_token_keys(token.keys, token.envelope_key)?,
+                });
+                Ok(())
+            })?;
+
+        config
+            .save()
+            .map_err(|_| ApiError::InternalError)?;
+
+        Ok(ApiOk::None)
+    }
+
+    fn decrypt_token_keys(encrypted_keys: Vec<schema::PrivateKey>, envelope_key: schema::EnvelopeKey) -> Result<Vec<config::PrivateKey>, schema::ApiError> {
+        let mut private_keys = Vec::new();
+        for key in encrypted_keys {
+            private_keys.push(config::PrivateKey {
+                pem: match envelope_key {
+                    schema::EnvelopeKey::Kms {
+                        ref region,
+                        ref access_key_id,
+                        ref secret_access_key,
+                        ref session_token,
+                    } => aws_ne::kms_decrypt(
+                        region.as_bytes(),
+                        access_key_id.as_bytes(),
+                        secret_access_key.as_bytes(),
+                        session_token.as_bytes(),
+                        &base64::decode(key.encrypted_pem_b64.as_str())
+                            .map_err(|_| ApiError::TokenKeyDecodingFailed)?,
+                    )
+                    .map_err(|_| ApiError::KmsDecryptFailed)
+                    .and_then(|v| {
+                        String::from_utf8(v).map_err(|_| ApiError::TokenProvisioningFailed)
+                    })?,
+                },
+                encrypted_pem_b64: key.encrypted_pem_b64,
+                id: key.id,
+                label: key.label,
+            })
+        }
+        Ok(private_keys)
     }
 }

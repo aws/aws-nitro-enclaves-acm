@@ -78,7 +78,7 @@ impl Token {
         flags |= pkcs11::CKF_WRITE_PROTECTED | pkcs11::CKF_SO_PIN_LOCKED;
 
         // TODO: set serial properly
-        let serial = format!("EVT{:02}", self.slot_id);
+        let serial = format!("EVT{:02X}", self.slot_id);
 
         pkcs11::CK_TOKEN_INFO {
             label: ck_padded_str!(self.label.as_str(), 32),
