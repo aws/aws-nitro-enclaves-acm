@@ -164,6 +164,7 @@ pub mod schema {
             pub label: String,
             pub slot_id: usize,
             pub ttl_secs: u64,
+            #[serde(skip_serializing_if = "Option::is_none")]
             pub keys: Option<Vec<PrivateKeyDescription>>,
         }
 
