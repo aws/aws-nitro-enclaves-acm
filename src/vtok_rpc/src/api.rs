@@ -125,8 +125,6 @@ pub mod schema {
             TokenRefreshFailed,
             TokenKeyDecodingFailed,
             KmsDecryptFailed,
-            // TODO: remove this NYI error once it's not needed anymore.
-            Nyi,
         }
 
         #[derive(Debug, Deserialize, Serialize)]
@@ -158,11 +156,13 @@ pub mod schema {
         pub struct PrivateKeyDescription {
             pub label: String,
             pub id: u8,
+            pub uri: String,
         }
 
         #[derive(Debug, Deserialize, Serialize)]
         pub struct TokenDescription {
             pub label: String,
+            pub slot_id: usize,
             pub ttl_secs: u64,
             pub keys: Option<Vec<PrivateKeyDescription>>,
         }
