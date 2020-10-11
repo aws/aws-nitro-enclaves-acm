@@ -442,8 +442,8 @@ cmd_build() {
     local ami=
     local eif=
     local cargo_args=()
-    local bin_dir="$EVAULT_BUILD/target/debug"
     local interactive=
+    local bin_dir="$EVAULT_BUILD_DIR/target/debug"
 
     if [[ $# -eq 0 ]] || [[ "$1" = all ]]; then
         cmd_build --release enclave-bins parent-bins dev-image al2-setup
@@ -453,7 +453,7 @@ cmd_build() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             "$EVBIN_RPC_CLIENT")
-                enclave_bins+=("$EVBIN_RPC_CLIENT")
+                parent_bins+=("$EVBIN_RPC_CLIENT")
                 ;;
             "$EVBIN_RPC_SERVER")
                 enclave_bins+=("$EVBIN_RPC_SERVER")
