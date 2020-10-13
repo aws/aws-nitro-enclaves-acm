@@ -789,7 +789,7 @@ cmd_openssl() {
     prepare_test_env
 
     for rsa_key in $RSA_KEYS ; do
-	    provision_keys --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
+        provision_key --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
         ok_or_die "Cannot provision openssl test keys."
 
     	echo "Running Sign&verify tests"
@@ -821,23 +821,23 @@ cmd_openssl() {
             test_openssl_signverify_rsa_x509 512 "rsa4096"
         fi
 
-        cleanup_keys --key-label "$rsa_key"
+        cleanup_key --key-label "$rsa_key"
     done
 
     echo "Running ECDSA Sign&Verify tests using openssl"
     for ec_key in $ECDSA_KEYS ; do
-        provision_keys --kms-key-id "$key_id" --kms-region "$region" --key-label "$ec_key"
+        provision_key --kms-key-id "$key_id" --kms-region "$region" --key-label "$ec_key"
 
         for fsize in $TEST_ECDSA_FILE_SIZES ; do
             test_openssl_signverify_ecdsa $fsize $ec_key
         done
 
-        cleanup_keys --key-label "$ec_key"
+        cleanup_key --key-label "$ec_key"
     done
 
     echo "Running Encrypt&Decrypt tests"
     for rsa_key in $RSA_KEYS ; do
-        provision_keys --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
+        provision_key --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
 
         for fsize in $TEST_SMALL_FILE_SIZES ; do
             test_openssl_encryptdecrypt_rsa $fsize $rsa_key
@@ -853,7 +853,7 @@ cmd_openssl() {
         test_openssl_encryptdecrypt_rsa_x509 512 "rsa4096"
 	fi
 
-        cleanup_keys --key-label "$rsa_key"
+        cleanup_key --key-label "$rsa_key"
     done
 
     cleanup_test_env
