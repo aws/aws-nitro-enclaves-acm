@@ -61,7 +61,7 @@ RUN git clone "https://github.com/awslabs/aws-lc.git" \
     && ldconfig /usr/lib
 
 # AWS-S2N
-ENV AWS_S2N_VER=v0.10.15
+ENV AWS_S2N_VER="v0.10.19"
 RUN git clone https://github.com/awslabs/s2n.git \
     && cd s2n \
     && git reset --hard $AWS_S2N_VER \
@@ -74,7 +74,7 @@ RUN git clone https://github.com/awslabs/s2n.git \
     && cmake --build build/ --parallel $(nproc) --target install
 
 # AWS-C-COMMON
-ENV AWS_C_COMMON_VER=v0.4.56
+ENV AWS_C_COMMON_VER="v0.4.59"
 RUN git clone https://github.com/awslabs/aws-c-common.git \
     && cd aws-c-common \
     && git reset --hard $AWS_C_COMMON_VER \
@@ -87,7 +87,7 @@ RUN git clone https://github.com/awslabs/aws-c-common.git \
     && cmake --build build/ --parallel $(nproc) --target install
 
 # AWS-C-IO
-ENV AWS_C_IO_VER=2fb7007483c270410c40c3aff8abdcaa36df8050
+ENV AWS_C_IO_VER="v0.6.3"
 RUN git clone https://github.com/awslabs/aws-c-io.git \
     && cd aws-c-io \
     && git reset --hard $AWS_C_IO_VER \
@@ -101,7 +101,7 @@ RUN git clone https://github.com/awslabs/aws-c-io.git \
     && cmake --build build/ --parallel $(nproc) --target install
 
 # AWS-C-COMPRESSION
-ENV AWS_C_COMPRESSION_VER=v0.2.10
+ENV AWS_C_COMPRESSION_VER="4ac2146c0bb66ef1b19942b86b6a4076039e1705"
 RUN git clone http://github.com/awslabs/aws-c-compression.git \
     && cd aws-c-compression \
     && git reset --hard $AWS_C_COMPRESSION_VER \
@@ -114,7 +114,7 @@ RUN git clone http://github.com/awslabs/aws-c-compression.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # AWS-C-HTTP
-ENV AWS_C_HTTP_VER=v0.5.17
+ENV AWS_C_HTTP_VER="77c19fb403198fe36abd19c6139973605794fac5"
 RUN git clone https://github.com/awslabs/aws-c-http.git \
     && cd aws-c-http \
     && git reset --hard $AWS_C_HTTP_VER \
@@ -127,7 +127,7 @@ RUN git clone https://github.com/awslabs/aws-c-http.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # AWS-C-CAL
-ENV AWS_C_CAL_VER=v0.2.7
+ENV AWS_C_CAL_VER="v0.3.3"
 RUN git clone https://github.com/awslabs/aws-c-cal.git \
     && cd aws-c-cal \
     && git reset --hard $AWS_C_CAL_VER \
@@ -140,7 +140,7 @@ RUN git clone https://github.com/awslabs/aws-c-cal.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # AWS-C-AUTH
-ENV AWS_C_AUTH_VER=v0.4.2
+ENV AWS_C_AUTH_VER="v0.4.3"
 RUN git clone https://github.com/awslabs/aws-c-auth.git \
     && cd aws-c-auth \
     && git reset --hard $AWS_C_AUTH_VER \
@@ -153,7 +153,7 @@ RUN git clone https://github.com/awslabs/aws-c-auth.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # JSON-C library
-ENV JSON_C_VER=json-c-0.14-20200419
+ENV JSON_C_VER="json-c-0.14-20200419"
 RUN git clone https://github.com/json-c/json-c.git \
     && cd json-c \
     && git reset --hard $JSON_C_VER \
@@ -169,20 +169,19 @@ RUN git clone https://github.com/json-c/json-c.git \
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $RUST_TOOLCHAIN
 
 # NSM LIB
-# TODO: use a tag, once we have one.
-ENV AWS_NE_NSM_API_VER=e3a1dfe9fb9d5354d7006c9738d62dbf7e086f53
-RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-nsm-api.git" \
+ENV AWS_NE_NSM_API_VER="v0.1.0"
+RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-nsm-api" \
     && cd aws-nitro-enclaves-nsm-api \
+    && git reset --hard $AWS_NE_NSM_API_VER \
     && PATH="$PATH:/root/.cargo/bin" cargo build --release \
     && mv target/release/libnsm.so /usr/lib/ \
     && mv target/release/nsm.h /usr/include/
 
 # AWS Nitro Enclaves SDK
-# TODO: use a tag, once we have one.
-#ENV AWS_NE_SDK_VER=711c3f1b7b638c5864e695d3760bcf12c3fdc2f3
-ENV AWS_NE_SDK_VER=c090a173ea0cb232d604d5cf564a98e68300be22
+ENV AWS_NE_SDK_VER="v0.1.0"
 RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-sdk-c" \
     && cd aws-nitro-enclaves-sdk-c \
+    && git reset --hard $AWS_NE_SDK_VER \
     && cmake \
         -DCMAKE_PREFIX_PATH=/usr \
         -DCMAKE_INSTALL_PREFIX=/usr \
