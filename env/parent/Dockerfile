@@ -10,6 +10,7 @@ ARG USER
 ARG USER_ID
 ARG GROUP_ID
 ARG RUST_TOOLCHAIN
+ARG CTR_HOME
 
 RUN yum install -y \
     git \
@@ -37,7 +38,7 @@ RUN mkdir -p /var/log/nitro_enclaves \
     && chown $USER_ID:$GROUP_ID /var/log/nitro_enclaves
 ENV NITRO_CLI_BLOBS=/opt/nitro_cli
 
-ENV HOME="/home/$USER"
+ENV HOME="$CTR_HOME"
 ENV PATH="$PATH:$HOME/.cargo/bin"
 USER $USER
 WORKDIR $HOME

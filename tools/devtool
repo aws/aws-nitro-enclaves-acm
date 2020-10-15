@@ -21,6 +21,7 @@ EVAULT_RUN_DIR="$EVAULT_BUILD_DIR/run"
 CTR_SRC_DIR="/evault.src"
 CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_RUN_DIR="$CTR_BUILD_DIR/run"
+CTR_HOME=$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)") 
 
 EVBIN_RPC_CLIENT=nitro-vtoken
 EVBIN_RPC_SERVER=vtok-srv
@@ -296,6 +297,7 @@ build_parent_ctr() {
         --build-arg USER_ID=$(id -u) \
         --build-arg GROUP_ID=$(id -g) \
         --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
+        --build-arg CTR_HOME="$CTR_HOME" \
         "$ctx_dir"
 }
 
@@ -310,6 +312,7 @@ build_enclave_ctr() {
         --build-arg GROUP_ID=$(id -g) \
         --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
         --build-arg GITHUB_CREDS="$EVAULT_GITHUB_CREDS" \
+        --build-arg CTR_HOME="$CTR_HOME" \
         "$EVAULT_SRC_DIR/env/enclave"
 }
 
