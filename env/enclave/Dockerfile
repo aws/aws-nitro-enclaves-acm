@@ -15,7 +15,7 @@ ARG USER_ID
 ARG GROUP_ID
 ARG RUST_TOOLCHAIN
 ARG GITHUB_CREDS
-
+ARG CTR_HOME
 
 # Force Rust dynamic linking against the Alpine-default musl libc.
 ENV RUSTFLAGS="-C target-feature=-crt-static"
@@ -201,7 +201,7 @@ RUN [[ $(id -u) -eq $USER_ID ]] && exit 0; \
     && chown -R "$USER:$group_name" "/home/$USER"
 
 USER $USER
-ENV HOME=/home/$USER
+ENV HOME="$CTR_HOME"
 ENV PATH="$HOME/.cargo/bin:$PATH"
 
 CMD ["/bin/sh"]
