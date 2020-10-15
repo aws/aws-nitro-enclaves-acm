@@ -24,8 +24,9 @@ RUN cd /tmp/build \
     && ./setup.sh --target devctr --rust-toolchain $RUST_TOOLCHAIN \
     && rm -rf /tmp/build
 
-# Create dev-time user
-RUN groupadd -g $GROUP_ID "$USER"; \
+# Create dev-time user if it not already present
+RUN [[ $(id -u) -eq $USER_ID ]] && exit 0; \
+    groupadd -g $GROUP_ID "$USER"; \
     group_name=$(getent group $GROUP_ID | cut -d: -f1) \
     && useradd -u $USER_ID -d "/home/$USER" -g "$group_name" -s /bin/bash "$USER" \
     && chown -R "$USER:$group_name" "$HOME" \
