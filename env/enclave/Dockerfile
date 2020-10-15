@@ -191,7 +191,8 @@ RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-sdk-c" \
     && cmake --build build --target install --parallel $(nproc)
 
 # Set up dev user
-RUN groupadd -g $GROUP_ID $USER; \
+RUN [[ $(id -u) -eq $USER_ID ]] && exit 0; \
+    $groupadd -g $GROUP_ID $USER; \
     group_name=$(getent group $GROUP_ID | cut -d: -f1) \
     && useradd -u $USER_ID -m -d "/home/$USER" -g "$group_name" -s /bin/sh $USER \
     && echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
