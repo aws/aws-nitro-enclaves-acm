@@ -21,7 +21,7 @@ EVAULT_RUN_DIR="$EVAULT_BUILD_DIR/run"
 CTR_SRC_DIR="/evault.src"
 CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_RUN_DIR="$CTR_BUILD_DIR/run"
-CTR_HOME=$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)") 
+CTR_HOME="$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)")"
 
 EVBIN_RPC_CLIENT=nitro-vtoken
 EVBIN_RPC_SERVER=vtok-srv
@@ -31,7 +31,6 @@ EVBIN_INIT=vtok-init
 EVBIN_P11_MOD=libvtok_p11.so
 
 EVAULT_RUST_TOOLCHAIN=1.46.0
-
 
 USAGE="\
 $MY_NAME
@@ -352,7 +351,9 @@ build_eif() {
     local docker_gid=$(ls -n /var/run/docker.sock | cut -d " " -f4)
     [[ -z "$docker_gid" ]] && die "Unable to find docker socket at /var/run/docker.sock"
 
-    docker run --rm -it \
+    local interactive=
+    [[ -t 1 ]] && interactive="-it"
+    docker run --rm $interactive \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
         --user "$(id -u):$docker_gid" \
@@ -442,6 +443,7 @@ cmd_build() {
     local eif=
     local cargo_args=()
     local bin_dir="$EVAULT_BUILD/target/debug"
+    local interactive=
 
     if [[ $# -eq 0 ]] || [[ "$1" = all ]]; then
         cmd_build --release enclave-bins parent-bins dev-image al2-setup
@@ -489,10 +491,15 @@ cmd_build() {
         shift
     done
 
+    #Is the shell interactive?
+    if [[ -t 1 ]]; then
+        interactive="-it"
+    fi
+
     # Build enclave-side binaries
     for ev_bin in "${enclave_bins[@]}"; do
         ensure_enclave_ctr
-        docker run --rm -it \
+        docker run --rm $interactive \
             -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
             --workdir "$CTR_SRC_DIR" \
             "$ENCLAVE_CTR_IMG" \
@@ -507,7 +514,7 @@ cmd_build() {
     # Build parent-instance-side binaries
     for ev_bin in "${parent_bins[@]}"; do
         ensure_parent_ctr
-        docker run --rm -it \
+        docker run --rm $interactive \
             -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
             --workdir "$CTR_SRC_DIR" \
             "$PARENT_CTR_IMG" \
@@ -522,7 +529,7 @@ cmd_build() {
     # Build the eVault PKCS#11 provider dynlib
     if [[ "$p11_mod" = y ]]; then
         ensure_enclave_ctr
-        docker run --rm -it \
+        docker run --rm $interactive \
             -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
             --workdir "$CTR_SRC_DIR" \
             "$ENCLAVE_CTR_IMG" \
