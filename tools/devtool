@@ -48,6 +48,9 @@ Commands:
             $EVBIN_INIT - the eVault enclave init (enclave-side binary);
             $EVBIN_P11_MOD - the eVault PKCS#11 provider dyn lib (enclave-side binary);
             dev-image - the development version (i.e. not signed) of the  eVault enclave image (EIF);
+            production-image - the signed production version of the eVault enclave image (EIF), when specified
+                               the directory containing the signing info and the key and certificate themselves
+                               needs to be provided;
             enclave-bins - all enclave-side binaries;
             parent-bins - all parent-side binaries;
             all - all eVault (release) binaries;
@@ -301,6 +304,9 @@ build_eif() {
     ensure_parent_ctr
 
     local ctx_dir="$EVAULT_BUILD_DIR/eif.ctx"
+    local eif_signing_dir=$1
+    local eif_signing_cert=$2
+    local eif_signing_key=$3
     rm -rf "$ctx_dir" && cp -rf "$EVAULT_SRC_DIR/env/eif" "$ctx_dir"
     ok_or_die "Unable to setup EIF docker context dir: $ctx_dir"
 
@@ -331,16 +337,23 @@ build_eif() {
     # TODO: detect docker socket path
     local docker_gid=$(ls -n /var/run/docker.sock | cut -d " " -f4)
     [[ -z "$docker_gid" ]] && die "Unable to find docker socket at /var/run/docker.sock"
+    
+    if [[ "$eif_signing_dir" != "" ]]; then
+	signing_extra_docker_args="-v $eif_signing_dir:$eif_signing_dir"
+	signing_extra_build_args="--private-key $eif_signing_key --signing-certificate $eif_signing_cert"
+    fi
 
     local interactive=
     [[ -t 1 ]] && interactive="-it"
     docker run --rm $interactive \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+	$signing_extra_docker_args \
         --user "$(id -u):$docker_gid" \
         "$PARENT_CTR_IMG" \
         nitro-cli build-enclave \
             --docker-uri "$eif_tag" \
+            $signing_extra_build_args \
             --output-file "$CTR_BUILD_DIR/p11ne.eif" \
             > "$EVAULT_BUILD_DIR/image-measurements.json"
 
@@ -437,6 +450,9 @@ cmd_build() {
     local p11_mod=
     local ami=
     local eif=
+    local eif_signing_dir=
+    local eif_signing_cert=
+    local eif_signing_key=
     local cargo_args=()
     local interactive=
     local bin_dir="$EVAULT_BUILD_DIR/target/debug"
@@ -468,6 +484,13 @@ cmd_build() {
                 ;;
             dev-image)
                 eif=y
+                ;;
+            production-image)
+                eif=y
+                eif_signing_dir=$2
+                eif_signing_cert=$3
+                eif_signing_key=$4
+                shift 3
                 ;;
             enclave-bins)
                 enclave_bins=("$EVBIN_RPC_SERVER" "$EVBIN_RAND" "$EVBIN_INIT")
@@ -533,7 +556,7 @@ cmd_build() {
 
     # Build the eVault EIF image
     if [[ "$eif" = y ]]; then
-        build_eif
+        build_eif "$eif_signing_dir" "$eif_signing_cert" "$eif_signing_key"
     fi
 
     # Build the AMI setup tarball
