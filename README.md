@@ -54,8 +54,8 @@ environment setup is required prior to building and/or running.
 eVault has a few different components, some meant to be run inside the enclave,
 others inside the parent instance:
 - enclave-side components:
-  - `vtok-rand` - entropy seeder, run once at enclave boot;
-  - `vtok-srv` - the eVault RPC server, used to query the state of the eVault
+  - `p11ne-rand` - entropy seeder, run once at enclave boot;
+  - `p11ne-srv` - the eVault RPC server, used to query the state of the eVault
      device, and to provision its database;
   - `libvtok_p11.so` - the PKCS#11 provider;
 - parent-instance-side components:

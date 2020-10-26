@@ -6,5 +6,5 @@ edition = "2018"
 description = "p11ne enclave init application"
 
 [[bin]]
-name = "vtok-init"
+name = "p11ne-init"
 path = "src/main.rs"
