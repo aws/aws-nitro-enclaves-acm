@@ -3,15 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 MY_VERSION="1.0"
-MY_NAME="nitro-evault"
-MY_DESC="Nitro eVault management tool"
+MY_NAME="p11ne-cli"
+MY_DESC="p11ne management tool"
 
 EVAULT_DATA_DIR="/usr/share/nitro_enclaves/p11ne"
 EVAULT_EIF_NAME="p11ne.eif"
 EVAULT_EIF_PATH="$EVAULT_DATA_DIR/$EVAULT_EIF_NAME"
 EVAULT_RPC_PORT=10000
 EVAULT_P11KIT_PORT=9999
-EVAULT_PKCS11_CONFIG_FILE="/etc/pkcs11/modules/evault.module"
+EVAULT_PKCS11_CONFIG_FILE="/etc/pkcs11/modules/p11ne.module"
 
 EVAULT_BIN_RPC_CLIENT="nitro-vtoken"
 EVAULT_BIN_P11_MOD="libvtok_p11.so"
@@ -26,7 +26,7 @@ AWS_SECRET_ACCESS_KEY=
 AWS_SESSION_TOKEN=
 
 EVAULT_DEVENV="${EVAULT_DEVENV-n}"
-EVAULT_DEVENV_RPC_SOCK="${EVAULT_DEVENV-/tmp/evault-rpc.sock}"
+EVAULT_DEVENV_RPC_SOCK="${EVAULT_DEVENV-/tmp/p11ne-rpc.sock}"
 
 
 USAGE="\
@@ -35,36 +35,36 @@ Usage: $(basename "$0") <command> [arguments]
 
 Commands:
 
-    start           Start the eVault enclave
-        --cpu-count     The number of vCPUs to allocate for the eVault enclave.
-        --memory        eVault enclave memory size, in MiB.
+    start           Start the p11ne enclave
+        --cpu-count     The number of vCPUs to allocate for the p11ne enclave.
+        --memory        p11ne enclave memory size, in MiB.
 
-    init-token      Initialize an eVault token
-        --key-db        The database file to be loaded into eVault for this token.
-                        See \`evault-db help\` for information on generating this file.
+    init-token      Initialize an p11ne token
+        --key-db        The database file to be loaded into p11ne for this token.
+                        See \`p11ne-db help\` for information on generating this file.
         --label         The token PKCS#11 label; a UTF-8 string, between 1 and 32 bytes long.
-                        Note: the token label must be unique across all eVault tokens.
+                        Note: the token label must be unique across all p11ne tokens.
         --pin           The PIN that should be used to secure access to this token;
                         a UTF-8 string, between 4 and 64 bytes long.
 
-    refresh-token   Refresh an eVault token
+    refresh-token   Refresh an p11ne token
         --label         Token label.
         --pin           The PIN used to access this token (previously set via an init-token
                         operation).
 
-    release-token   Release an eVault token
+    release-token   Release an p11ne token
         --label         The label that (uniquely) identifies the token to be released.
         --pin           The PIN used to access this token (previously set via an init-token
                         operation).
 
-    describe-device Get information about the eVault device
+    describe-device Get information about the p11ne device
 
-    describe-token  Get information about an eVault vToken
+    describe-token  Get information about an p11ne vToken
         --label         The label that (uniquely) identifies the token to be released.
         --pin           The PIN used to access this token (previously set via an init-token
                         operation).
 
-    stop            Stop the eVault enclave
+    stop            Stop the p11ne enclave
 "
 
 
@@ -112,13 +112,13 @@ say() {
         || echo "[$MY_NAME] $*"
 }
 
-# Get the eVault image path
+# Get the p11ne image path
 #
-evault_eif_path() {
+p11ne_eif_path() {
     echo "$EVAULT_EIF_PATH"
 }
 
-evault_rpc_server_addr() {
+p11ne_rpc_server_addr() {
     if [[ "$EVAULT_DEVENV" != y ]]; then
         local cid=$(nitro-cli describe-enclaves | jq ".[] | .EnclaveCID")
         [[ -n "$cid" ]] || return 1
@@ -128,12 +128,12 @@ evault_rpc_server_addr() {
     fi
 }
 
-# Ensure the eVault image is present
+# Ensure the p11ne image is present
 #
 ensure_eif() {
-    local path=$(evault_eif_path)
-    [[ -f "$path" ]] || die "Error: evault EIF not found at $path"
-    [[ -r "$path" ]] || die "Error: cannot read eVault EIF from $path"
+    local path=$(p11ne_eif_path)
+    [[ -f "$path" ]] || die "Error: p11ne EIF not found at $path"
+    [[ -r "$path" ]] || die "Error: cannot read p11ne EIF from $path"
 }
 
 # Ensure nitro-cli tool is installed
@@ -195,12 +195,12 @@ ensure_enclave_resources() {
 }
 
 # Keep p11-kit client-side configuration in sync with the current
-# eVault enclave vsock CID.
+# p11ne enclave vsock CID.
 #
 create_pkcs11_config() {
     local cid
     cid=$(nitro-cli describe-enclaves | jq '.[] | .EnclaveCID')
-    [[ -n "$cid" ]] || "Cannot get eVault enclave CID."
+    [[ -n "$cid" ]] || "Cannot get p11ne enclave CID."
 
     local conf
     conf="remote:vsock:cid=$cid;port=$EVAULT_P11KIT_PORT"
@@ -216,7 +216,7 @@ create_pkcs11_config() {
         sudo mkdir -p "$(dirname "$EVAULT_PKCS11_CONFIG_FILE")" \
             && { echo -e "$conf" | sudo tee  "$EVAULT_PKCS11_CONFIG_FILE"; } > /dev/null
     }
-    ok_or_die "Cannot write PKCS#11 eVault config to $EVAULT_PKCS11_CONFIG_FILE"
+    ok_or_die "Cannot write PKCS#11 p11ne config to $EVAULT_PKCS11_CONFIG_FILE"
     say "Successfully created PKCS#11 config at $EVAULT_PKCS11_CONFIG_FILE"
 }
 
@@ -240,7 +240,7 @@ cmd_help() {
     echo "$USAGE"
 }
 
-# Start the eVault
+# Start the p11ne
 #
 cmd_start() {
 
@@ -274,21 +274,21 @@ cmd_start() {
         die "An enclave is already running."
     fi
 
-    # Spawn the eVault enclave
+    # Spawn the p11ne enclave
     nitro-cli run-enclave \
         --cpu-count "$cpu_count" \
         --memory "$memory" \
-        --eif-path "$(evault_eif_path)" \
+        --eif-path "$(p11ne_eif_path)" \
             > /dev/null 2>&1
-    ok_or_die "Cannot start the eVault enclave." \
+    ok_or_die "Cannot start the p11ne enclave." \
         "Have enough resources been allocated via nitro-cli-config?"
 
-    say "Successfully started the eVault enclave."
+    say "Successfully started the p11ne enclave."
 
     create_pkcs11_config
 }
 
-# Stop the eVault
+# Stop the p11ne
 #
 cmd_stop() {
     [[ "$EVAULT_DEVENV" = y ]] \
@@ -306,13 +306,13 @@ cmd_stop() {
     local id
     id=$(nitro-cli describe-enclaves | jq -r '.[] | .EnclaveID')
     if [ -z "$id" ]; then
-        die "No eVault enclave is currently running."
+        die "No p11ne enclave is currently running."
     fi
 
     nitro-cli terminate-enclave --enclave-id "$id" > /dev/null 2>&1
-    ok_or_die "Cannot stop the eVault enclave."
+    ok_or_die "Cannot stop the p11ne enclave."
 
-    say "Successfully stopped the eVault enclave."
+    say "Successfully stopped the p11ne enclave."
 
     remove_pkcs11_config
 }
@@ -327,8 +327,8 @@ execute_rpc() {
     local rpc_request
     local rpc_addr
     rpc_request="$1"
-    rpc_addr="$(evault_rpc_server_addr)"
-    [[ -n $rpc_addr ]] || die "The eVault enclave is not running."
+    rpc_addr="$(p11ne_rpc_server_addr)"
+    [[ -n $rpc_addr ]] || die "The p11ne enclave is not running."
 
     # Execute the RPC
     local result
@@ -381,7 +381,7 @@ cmd_init-token() {
             --argjson c "$envelope_key" \
             --argjson d "$keys" \
             '{AddToken: {token: {label: $a, pin: $b, envelope_key: $c, keys: $d }}}')
-    ok_or_die "Cannot construct eVault token initialization message."
+    ok_or_die "Cannot construct p11ne token initialization message."
 
     # Execute RPC
     local result
@@ -424,7 +424,7 @@ cmd_refresh-token() {
             --arg b "$pin" \
             --argjson c "$envelope_key" \
             '{RefreshToken: {label: $a, pin: $b, envelope_key: $c}}')
-    ok_or_die "Cannot construct eVault token refresh message."
+    ok_or_die "Cannot construct p11ne token refresh message."
 
     # Execute RPC
     local result
@@ -455,7 +455,7 @@ cmd_release-token() {
             --arg a "$label" \
             --arg b "$pin" \
             '{RemoveToken: {label: $a, pin: $b}}')
-    ok_or_die "Cannot construct eVault token release message."
+    ok_or_die "Cannot construct p11ne token release message."
 
     # Execute RPC
     local result
@@ -500,7 +500,7 @@ cmd_describe-token() {
             --arg a "$label" \
             --arg b "$pin" \
             '{DescribeToken: {label: $a, pin: $b}}')
-    ok_or_die "Cannot construct eVault describe token message."
+    ok_or_die "Cannot construct p11ne describe token message."
 
     # Execute RPC
     local result

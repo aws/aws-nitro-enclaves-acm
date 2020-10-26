@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 USAGE="
-    eVault installer for Amazon Linux 2 - install and set up eVault and its dependencies
+    p11ne installer for Amazon Linux 2 - install and set up p11ne and its dependencies
 
     Usage: $0 --target <dev|release> [--rust-toolchain <version>]
 
@@ -49,11 +49,11 @@ ok_or_die() {
     [ $? -eq 0 ] || die "$*"
 }
 
-evault_is_release_setup() {
+p11ne_is_release_setup() {
     [[ $OPT_TARGET = release ]]
 }
 
-evault_setup_parent() {
+p11ne_setup_parent() {
     # Install build deps that are currently missing. We will be removing these before
     # the end, so we need to avoid removing any packages that we need, but were already
     # installed.
@@ -73,7 +73,7 @@ evault_setup_parent() {
             && popd
     ok_or_die "Pre-built rootfs install failed."
 
-    if evault_is_release_setup; then
+    if p11ne_is_release_setup; then
         systemctl enable docker
         ok_or_die "Error setting up startup services"
 
@@ -124,7 +124,7 @@ evault_setup_parent() {
     popd
 
     # Clean up
-    if evault_is_release_setup; then
+    if p11ne_is_release_setup; then
         # Remove build-time deps
         yum remove -y "${MY_BUILD_DEPS[@]}"
         yum autoremove -y
@@ -149,7 +149,7 @@ main() {
 
     [[ -n "$OPT_TARGET" ]] || die "Error: missing target. See --help."
 
-    evault_setup_parent
+    p11ne_setup_parent
 }
 
 main "$@"

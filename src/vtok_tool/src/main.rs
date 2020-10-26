@@ -13,17 +13,17 @@ use vtok_rpc::api::schema;
 use vtok_rpc::{HttpTransport, Transport};
 use vtok_rpc::{VsockAddr, VsockStream};
 
-const USAGE: &str = r#"Nitro vToken Tool
+const USAGE: &str = r#"p11ne client
     Usage:
         nitro-vtoken <command> [<global options>] [<command options>]
 
     Global options:
         --server <address>
             [REQUIRED]
-            Address used to connect to the eVault server, using the format
+            Address used to connect to the p11ne server, using the format
             [vsock:CID:PORT | unix:PATH].
             vsock example (say CID=3 and port=5252): --server vsock:3:5252
-            Unix sockets example: --server unix:/tmp/evault-rpc.sock
+            Unix sockets example: --server unix:/tmp/p11ne-rpc.sock
 
         --help
             Show this usage message.
@@ -32,8 +32,8 @@ const USAGE: &str = r#"Nitro vToken Tool
 
         raw-rpc
             Perform a raw remote procedure call. This provides a low-level interface
-            to the eVault RPC server.
-            A raw (json-serialized) API request is read from STDIN, sent to the evault
+            to the p11ne RPC server.
+            A raw (json-serialized) API request is read from STDIN, sent to the p11ne
             RPC server, and the response is written to STDOUT, also in its raw,
             json-serialized form.
 

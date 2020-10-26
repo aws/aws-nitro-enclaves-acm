@@ -38,7 +38,7 @@ pub struct Device {
     slots: Vec<Option<Token>>,
 }
 
-/// Device config helper, used to safely access the global eVault config, stored in the file system
+/// Device config helper, used to safely access the global p11ne config, stored in the file system
 /// at `crate::defs::DEVICE_CONFIG_PATH`.
 pub struct Config {
     device: Device,

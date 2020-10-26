@@ -19,10 +19,10 @@ use vtok_rpc::HttpTransport;
 use vtok_rpc::{Listener, VsockAddr, VsockListener};
 use worker::Worker;
 
-const USAGE: &str = r#"Nitro vToken database provisioning server
+const USAGE: &str = r#"p11ne RPC server
     Usage:
-        vtoken-srv vsock <port>
-        vtoken-srv unix <path>
+        p11ne-srv vsock <port>
+        p11ne-srv unix <path>
 "#;
 
 #[derive(Debug)]
@@ -49,7 +49,7 @@ impl fmt::Display for Error {
             Self::ConfigError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
-            Self::InitRandError => write!(f, "[vToken] Cannot initialize eVault RNG"),
+            Self::InitRandError => write!(f, "[p11ne] Cannot initialize RNG"),
             Self::WorkerError(e) => write!(f, "{:?}", e),
         }
     }

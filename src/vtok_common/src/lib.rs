@@ -10,7 +10,7 @@ pub mod defs {
     /// Manufacturer of the various PKCS#11 objects (library, tokens, slots).
     pub const MANUFACTURER: &str = "Amazon";
 
-    /// The filesystem path used to store the eVault DB/config file. This is read by the PKCS#11
+    /// The filesystem path used to store the p11ne DB/config file. This is read by the PKCS#11
     /// provider (vtok_p11), and written to by the RPC server (vtok_srv).
     pub const DEVICE_CONFIG_PATH: &str = "./config.json";
     /// PKCS#11 provider description, as reported by vtok_p11.

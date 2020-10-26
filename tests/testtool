@@ -2,10 +2,10 @@
 # Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Test tool. Used for smoke-testing an eVault enclave.
+# Test tool. Used for smoke-testing an p11ne enclave.
 # Right now user should copy the following on an EC2 instance
-# - the tests directory from the eVault repo
-# - the testhelpers binary in the tests directory (pre-built in the eVault repo)
+# - the tests directory from the p11ne repo
+# - the testhelpers binary in the tests directory (pre-built in the p11ne repo)
 # /home/ec2-user/tests/testtool
 # /home/ec2-user/tests/testhelpers
 # ...
@@ -28,7 +28,7 @@ TEST_DIGESTS="sha1 sha224 sha256 sha384 sha512"
 PIN="1234"
 KEYID="%01"
 TOKEN_LABEL="test-token"
-URI_TOKEN="pkcs11:model=evault-token;manufacturer=Amazon;serial=EVT00;token=$TOKEN_LABEL;pin-value=$PIN;id=$KEYID"
+URI_TOKEN="pkcs11:model=p11ne-token;manufacturer=Amazon;serial=EVT00;token=$TOKEN_LABEL;pin-value=$PIN;id=$KEYID"
 KEYS_DIR="./tests/keys/"
 KEY_DB_DIR="tests/db"
 RSA_KEYS="rsa1024 rsa2048 rsa4096"
@@ -709,22 +709,22 @@ prepare_test_env() {
     mkdir -p "$KEY_DB_DIR"
     ok_or_die "Cannot create test key database directory."
 
-    # Initialize the evault enclave
-    nitro-evault start > /dev/null 2>&1
+    # Initialize the p11ne enclave
+    p11ne-cli start > /dev/null 2>&1
     if [ $? -ne 0 ] ; then
     # In case previous test was interrupted. Restart the enclave now.
-        nitro-evault stop
-        ok_or_die "Cannot stop the eVault enclave"
+        p11ne-cli stop
+        ok_or_die "Cannot stop the p11ne enclave"
 
-        nitro-evault start
-        ok_or_die "Cannot start the eVault enclave"
+        p11ne-cli start
+        ok_or_die "Cannot start the p11ne enclave"
     fi
 }
 
 # Cleanup test environment
 cleanup_test_env() {
 
-    nitro-evault stop > /dev/null 2>&1
+    p11ne-cli stop > /dev/null 2>&1
 
     rm -rf "$KEY_DB_DIR"
 
@@ -748,10 +748,10 @@ provision_key() {
     done
 
     # Initialize a token with one key type
-    evault-db pack-key --id 1 --label testkey --key-file "$(get_key_file "$keylabel" private)" --out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
-    ok_or_die "Cannot pack nitro-evault token test key."
+    p11ne-db pack-key --id 1 --label testkey --key-file "$(get_key_file "$keylabel" private)" --out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
+    ok_or_die "Cannot pack p11ne token test key."
 
-    nitro-evault init-token --key-db "$KEY_DB_DIR/$keylabel.db" --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+    p11ne-cli init-token --key-db "$KEY_DB_DIR/$keylabel.db" --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
 
     return 0
 }
@@ -770,7 +770,7 @@ cleanup_key() {
         shift
     done
 
-    nitro-evault release-token --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+    p11ne-cli release-token --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
 }
 
 # Openssl
