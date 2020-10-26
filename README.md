@@ -61,7 +61,7 @@ others inside the parent instance:
 - parent-instance-side components:
   - `nitro-vtoken` - the eVault RPC client, providing a low-level interface to
     the eVault RPC server;
-  - `nitro-evault` - a user-facing CLI tool that can be used to manage the
+  - `p11ne-cli` - a user-facing CLI tool that can be used to manage the
     eVault enclave (e.g. provision PKCS#11 tokens)
 
 ## Building
@@ -120,7 +120,7 @@ pointing to the pkcs#11 provider module token:
 
 ```bash
 openssl pkeyutl -keyform engine -engine pkcs11 -sign -inkey \
-	"pkcs11:model=evault-token;manufacturer=Amazon;serial=EVT00;token=my-token-label;id=%52;type=private" \
+	"pkcs11:model=p11ne-token;manufacturer=Amazon;serial=EVT00;token=my-token-label;id=%52;type=private" \
 	-in hello.txt -out test.sig
 ```
 

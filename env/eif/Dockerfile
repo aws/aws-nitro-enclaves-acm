@@ -16,7 +16,7 @@ COPY $EVBIN_RAND /usr/bin/
 COPY $EVBIN_P11_MOD /usr/lib/
 COPY $EVBIN_INIT /usr/bin/
 
-RUN mkdir -p /rootfs/evault
+RUN mkdir -p /rootfs/p11ne
 WORKDIR /rootfs
 
 # Collect eVault lib deps
@@ -39,7 +39,7 @@ RUN BINS="\
     done
 RUN mkdir -p /rootfs/etc/ssl/certs \
     && cp -f /etc/ssl/certs/ca-certificates.crt /rootfs/etc/ssl/certs/
-RUN mkdir -p /rootfs/evault
+RUN mkdir -p /rootfs/p11ne
 
 RUN mkdir -p /rootfs/bin/ && \
     cp /rootfs/usr/bin/"$EVBIN_INIT" /rootfs/bin/init && \
@@ -49,5 +49,5 @@ RUN find /rootfs
 
 FROM scratch
 COPY --from=builder /rootfs /
-WORKDIR /run/evault
+WORKDIR /run/p11ne
 CMD ["/bin/init"]

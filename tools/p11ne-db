@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 MY_VERSION="1.1"
-MY_NAME="evault-db"
-MY_DESC="Nitro eVault database formatting tool"
+MY_NAME="p11ne-db"
+MY_DESC="p11ne database formatting tool"
 
 USAGE="\
 $MY_NAME v$MY_VERSION - $MY_DESC
@@ -12,8 +12,7 @@ Usage: $(basename "$0") <command> [arguments]
 
 Commands:
 
-    pack-key        Packs an input PEM private key into an eVault
-                    specific object format.
+    pack-key        Packs an input PEM private key into a p11ne specific format.
 
     --id            <private-key id>
     --label         <private-key label>

@@ -7,7 +7,7 @@
 ENCLAVE_CTR_VERSION="1"
 PARENT_CTR_VERSION="1"
 
-MY_NAME="eVault devtool"
+MY_NAME="p11ne devtool"
 ENCLAVE_CTR="p11ne-enclave"
 ENCLAVE_CTR_IMG="$ENCLAVE_CTR:$ENCLAVE_CTR_VERSION"
 PARENT_CTR="p11ne-parent"
@@ -27,7 +27,7 @@ EVBIN_AGENT=vtok-agent
 EVBIN_RPC_CLIENT=nitro-vtoken
 EVBIN_RPC_SERVER=vtok-srv
 EVBIN_RAND=vtok-rand
-EVBIN_CLI=nitro-evault
+EVBIN_CLI=p11ne-cli
 EVBIN_INIT=vtok-init
 EVBIN_P11_MOD=libvtok_p11.so
 
@@ -40,22 +40,22 @@ Usage: $(basename "$0") <command>
 Commands:
 
     build [--release] [<target>] [<target>] ... [<target>]
-        Build the eVault binaries specified by <target>.
+        Build the p11ne binaries specified by <target>.
         Each <target> must be one of:
-            $EVBIN_RPC_CLIENT - the eVault RPC client (parent-instance-side binary);
-            $EVBIN_RPC_SERVER - the eVault RPC server (enclave-side binary);
-            $EVBIN_RAND - the eVault random seeder (enclave-side binary);
-            $EVBIN_INIT - the eVault enclave init (enclave-side binary);
-            $EVBIN_P11_MOD - the eVault PKCS#11 provider dyn lib (enclave-side binary);
-            dev-image - the development version (i.e. not signed) of the  eVault enclave image (EIF);
+            $EVBIN_RPC_CLIENT - the p11ne RPC client (parent-instance-side binary);
+            $EVBIN_RPC_SERVER - the p11ne RPC server (enclave-side binary);
+            $EVBIN_RAND - the p11ne random seeder (enclave-side binary);
+            $EVBIN_INIT - the p11ne enclave init (enclave-side binary);
+            $EVBIN_P11_MOD - the p11ne PKCS#11 provider dyn lib (enclave-side binary);
+            dev-image - the development version (i.e. not signed) of the  p11ne enclave image (EIF);
             production-image - the signed production version of the eVault enclave image (EIF), when specified
                                the directory containing the signing info and the key and certificate themselves
                                needs to be provided;
             enclave-bins - all enclave-side binaries;
             parent-bins - all parent-side binaries;
-            all - all eVault (release) binaries;
-            al2-setup - the eVault AL2 installer; the tarball built here can be
-                        used to install eVault on an Amazon Linux 2 machine.
+            all - all p11ne (release) binaries;
+            al2-setup - the p11ne AL2 installer; the tarball built here can be
+                        used to install p11ne on an Amazon Linux 2 machine.
         If no arguments are passed, the build process will default to \`all\`.
 
     clean
@@ -69,8 +69,8 @@ Commands:
               the parent-side p11-kit client will connect.
 
     simulate-enclave
-        Mock-run the eVault enclave by using a local Docker container. This will
-        start the eVault RPC server and p11-kit server in foreground mode, so that
+        Mock-run the p11ne enclave by using a local Docker container. This will
+        start the p11ne RPC server and p11-kit server in foreground mode, so that
         their logs and STDERR output show up at the terminal.
         Use \`simulate-parent\` to interact with the running enclave container.
 "
@@ -311,7 +311,7 @@ build_eif() {
     ok_or_die "Unable to setup EIF docker context dir: $ctx_dir"
 
     cmd_build --release enclave-bins
-    ok_or_die "Unable to build eVault enclave binaries."
+    ok_or_die "Unable to build p11ne enclave binaries."
 
     local bins=(
         "$EVAULT_BUILD_DIR/target/release/$EVBIN_RPC_SERVER"
@@ -376,7 +376,7 @@ build_al2_setup() {
     ok_or_die "nitro-cli build failed."
 
     cmd_build --release parent-bins
-    ok_or_die "eVault parent binaries build failed."
+    ok_or_die "p11ne parent binaries build failed."
 
     cmd_build dev-image
     ok_or_die "EIF build failed."
@@ -389,11 +389,11 @@ build_al2_setup() {
             "$EVAULT_BUILD_DIR/target/release/$EVBIN_RPC_CLIENT" \
             "install/usr/bin/$EVBIN_RPC_CLIENT" \
         && install -D -m 0755 \
-            "$EVAULT_SRC_DIR/tools/nitro-evault" \
-            "install/usr/bin/nitro-evault" \
+            "$EVAULT_SRC_DIR/tools/p11ne-cli" \
+            "install/usr/bin/p11ne-cli" \
         && install -D -m 0755 \
-            "$EVAULT_SRC_DIR/tools/evault-db" \
-            "install/usr/bin/evault-db" \
+            "$EVAULT_SRC_DIR/tools/p11ne-db" \
+            "install/usr/bin/p11ne-db" \
         && install -D -m 0644 \
             "$EVAULT_BUILD_DIR/p11ne.eif" \
             "install${my_data_dir}/p11ne.eif" \
@@ -542,7 +542,7 @@ cmd_build() {
         say "Built: $bin_dir/$ev_bin"
     done
 
-    # Build the eVault PKCS#11 provider dynlib
+    # Build the p11ne PKCS#11 provider dynlib
     if [[ "$p11_mod" = y ]]; then
         ensure_enclave_ctr
         docker run --rm $interactive \
@@ -554,7 +554,7 @@ cmd_build() {
         say "Built: $bin_dir/$EVBIN_P11_MOD"
     fi
 
-    # Build the eVault EIF image
+    # Build the p11ne EIF image
     if [[ "$eif" = y ]]; then
         build_eif "$eif_signing_dir" "$eif_signing_cert" "$eif_signing_key"
     fi

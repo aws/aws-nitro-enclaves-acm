@@ -3,8 +3,8 @@
 
 use std::process::Command;
 
-/// The eVault enclave init
-/// Spawns the eVault enclave main applications
+/// The p11ne enclave init
+/// Spawns the p11ne enclave main applications
 /// - the random seeder
 /// - the provisioning/rpc server
 /// - the p11-kit server

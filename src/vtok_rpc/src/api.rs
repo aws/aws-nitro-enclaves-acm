@@ -9,7 +9,7 @@ pub mod schema {
         use super::super::validators;
         use serde::{Deserialize, Serialize};
 
-        /// The RPC URL used for the evault API.
+        /// The RPC URL used for the p11ne API.
         /// Note: this can and should be used to versionize the API.
         pub const API_URL: &str = "/rpc/v1";
 
@@ -32,7 +32,7 @@ pub mod schema {
                 token: Token,
             },
 
-            /// Get a high-level description of the evault device, including active tokens
+            /// Get a high-level description of the p11ne device, including active tokens
             /// and the current number of free slots.
             ///
             /// Returns:
@@ -74,7 +74,7 @@ pub mod schema {
                 envelope_key: EnvelopeKey,
             },
 
-            /// Remove a specific token from the evault device.
+            /// Remove a specific token from the p11ne device.
             ///
             /// Returns:
             /// - `ApiOk::None` on success;
