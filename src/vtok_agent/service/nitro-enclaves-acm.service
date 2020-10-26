@@ -9,7 +9,7 @@ Before=nginx.service
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/mkdir -p /run/nitro_enclaves/acm
-ExecStart=/usr/bin/vtok-agent
+ExecStart=/usr/bin/p11ne-agent
 ExecStopPost=/usr/bin/rm -r /run/nitro_enclaves/acm
 Restart=always
 RestartSec=5

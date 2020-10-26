@@ -20,5 +20,5 @@ vtok_common = { path = "../vtok_common" }
 vtok_rpc = { path = "../vtok_rpc" }
 
 [[bin]]
-name = "vtok-agent"
+name = "p11ne-agent"
 path = "src/main.rs"

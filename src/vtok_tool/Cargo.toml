@@ -11,5 +11,5 @@ serde_json = "1.0"
 vtok_rpc = { path = "../vtok_rpc" }
 
 [[bin]]
-name = "nitro-vtoken"
+name = "p11ne-client"
 path = "src/main.rs"
