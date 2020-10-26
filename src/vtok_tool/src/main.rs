@@ -15,7 +15,7 @@ use vtok_rpc::{VsockAddr, VsockStream};
 
 const USAGE: &str = r#"p11ne client
     Usage:
-        nitro-vtoken <command> [<global options>] [<command options>]
+        p11ne-client <command> [<global options>] [<command options>]
 
     Global options:
         --server <address>
@@ -146,9 +146,9 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
     }
 }
 
-/// Parameters:
-/// AF_VSOCK: <nitro-vtoken> "vsock" "10000"
-/// AF_UNIX:  <nitro-vtoken> "unix" "some/path"
+/// Usage:
+/// AF_VSOCK: p11ne-client "vsock" "10000"
+/// AF_UNIX:  p11ne-client "unix" "some/path"
 fn rusty_main() -> Result<(), Error> {
     let mut args = std::env::args();
 

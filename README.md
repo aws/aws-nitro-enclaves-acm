@@ -59,7 +59,7 @@ others inside the parent instance:
      device, and to provision its database;
   - `libvtok_p11.so` - the PKCS#11 provider;
 - parent-instance-side components:
-  - `nitro-vtoken` - the eVault RPC client, providing a low-level interface to
+  - `p11ne-client` - the eVault RPC client, providing a low-level interface to
     the eVault RPC server;
   - `p11ne-cli` - a user-facing CLI tool that can be used to manage the
     eVault enclave (e.g. provision PKCS#11 tokens)

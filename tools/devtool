@@ -23,8 +23,8 @@ CTR_BUILD_DIR="$CTR_SRC_DIR/build"
 CTR_RUN_DIR="$CTR_BUILD_DIR/run"
 CTR_HOME="$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)")"
 
-EVBIN_AGENT=vtok-agent
-EVBIN_RPC_CLIENT=nitro-vtoken
+EVBIN_AGENT=p11ne-agent
+EVBIN_RPC_CLIENT=p11ne-client
 EVBIN_RPC_SERVER=vtok-srv
 EVBIN_RAND=vtok-rand
 EVBIN_CLI=p11ne-cli
@@ -215,7 +215,7 @@ ensure_enclave_ctr() {
     ensure_docker
 
     [[ $(docker images -q "$ENCLAVE_CTR_IMG" | wc -l) -gt 0 ]] || {
-        say "Docker container $ENCALVE_CTR_IMG not found. Will build it now..."
+        say "Docker container $ENCLAVE_CTR_IMG not found. Will build it now..."
         build_enclave_ctr
     }
     ok_or_die "Enclave dev container build failed."
@@ -448,7 +448,6 @@ cmd_build() {
     local parent_bins=()
     local al2_setup=
     local p11_mod=
-    local ami=
     local eif=
     local eif_signing_dir=
     local eif_signing_cert=
