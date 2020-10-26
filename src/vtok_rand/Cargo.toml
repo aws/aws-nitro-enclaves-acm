@@ -6,5 +6,5 @@ edition = "2018"
 description = "Nitro vToken randomness seeder"
 
 [[bin]]
-name = "vtok-rand"
+name = "p11ne-rand"
 path = "src/main.rs"

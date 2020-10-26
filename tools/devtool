@@ -25,10 +25,10 @@ CTR_HOME="$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)")"
 
 EVBIN_AGENT=p11ne-agent
 EVBIN_RPC_CLIENT=p11ne-client
-EVBIN_RPC_SERVER=vtok-srv
-EVBIN_RAND=vtok-rand
+EVBIN_RPC_SERVER=p11ne-server
+EVBIN_RAND=p11ne-rand
 EVBIN_CLI=p11ne-cli
-EVBIN_INIT=vtok-init
+EVBIN_INIT=p11ne-init
 EVBIN_P11_MOD=libvtok_p11.so
 
 EVAULT_RUST_TOOLCHAIN=1.46.0

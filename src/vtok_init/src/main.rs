@@ -9,7 +9,7 @@ use std::process::Command;
 /// - the provisioning/rpc server
 /// - the p11-kit server
 fn main() {
-    Command::new("vtok-rand")
+    Command::new("p11ne-rand")
         .spawn()
         .expect("random generator failed to start.")
         .wait()
@@ -27,7 +27,7 @@ fn main() {
         ])
         .spawn()
         .expect("p11-kit server failed to start.");
-    Command::new("vtok-srv")
+    Command::new("p11ne-server")
         .args(&["vsock", "10000"])
         .spawn()
         .expect("provisioning server failed to start.")
