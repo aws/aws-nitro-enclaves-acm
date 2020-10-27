@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_yaml;
 
+use crate::defs;
+
 #[derive(Debug)]
 pub enum Error {
     IoError(std::io::Error),
@@ -15,7 +17,6 @@ pub enum Target {
         path: String,
         user: Option<String>,
         group: Option<String>,
-        force_start: Option<bool>,
     },
 }
 
@@ -65,11 +66,22 @@ pub struct Log {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct Options {
+    #[serde(default = "Options::default_nginx_force_start")]
+    pub nginx_force_start: bool,
+    #[serde(default = "Options::default_nginx_reload_wait_ms")]
+    pub nginx_reload_wait_ms: u64,
+    #[serde(default = "Options::default_sync_interval_secs")]
+    pub sync_interval_secs: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub enclave: Enclave,
     pub tokens: Vec<Token>,
-    pub sync_interval_secs: Option<u64>,
     pub log: Option<Log>,
+    #[serde(default)]
+    pub options: Options,
 }
 
 impl Config {
@@ -90,6 +102,28 @@ impl From<LogLevel> for log::Level {
             LogLevel::Info => log::Level::Info,
             LogLevel::Debug => log::Level::Debug,
             LogLevel::Trace => log::Level::Trace,
+        }
+    }
+}
+
+impl Options {
+    fn default_nginx_force_start() -> bool {
+        defs::DEFAULT_NGINX_FORCE_START
+    }
+    fn default_nginx_reload_wait_ms() -> u64 {
+        defs::DEFAULT_NGINX_RELOAD_WAIT_MS
+    }
+    fn default_sync_interval_secs() -> u64 {
+        defs::DEFAULT_SYNC_INTERVAL_SECS
+    }
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            nginx_force_start: Self::default_nginx_force_start(),
+            nginx_reload_wait_ms: Self::default_nginx_reload_wait_ms(),
+            sync_interval_secs: Self::default_sync_interval_secs(),
         }
     }
 }

@@ -32,6 +32,7 @@ pub mod defs {
     pub const DEFAULT_RPC_PORT: u32 = 10000;
     pub const DEFAULT_ENCLAVE_BOOT_TIMEOUT_MS: u64 = 5000;
     pub const DEFAULT_NGINX_FORCE_START: bool = true;
+    pub const DEFAULT_NGINX_RELOAD_WAIT_MS: u64 = 1000;
     pub const DEFAULT_SYNC_INTERVAL_SECS: u64 = 600;
     pub const DEFAULT_TOKEN_REFRESH_INTERVAL_SECS: u64 = 2 * 3600;
     pub const DEFAULT_LOG_LEVEL: log::Level = log::Level::Info;

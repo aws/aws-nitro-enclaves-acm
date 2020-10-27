@@ -30,16 +30,11 @@ pub enum Error {
     EnclaveError(enclave::Error),
     FileDbError(std::io::Error),
     FileDbParseError(serde_json::Error),
-    NginxNotActive,
-    NginxReloadError(Option<i32>),
     NixError(nix::Error),
     ImdsError(imds::Error),
     PinGenerationError(std::io::Error),
     RefreshTokenError(schema::ApiError),
     SourceDbEmpty,
-    SwapOnError(schema::ApiError),
-    SwapOffError(schema::ApiError),
-    SystemdExecError(std::io::Error),
     UpdateTokenError(schema::ApiError),
     TargetIoError(std::io::Error),
 }
@@ -179,18 +174,12 @@ pub struct ManagedToken {
     db: DbSource,
     target: Option<config::Target>,
     enclave: Rc<P11neEnclave>,
-    is_swapped: bool,
-    swap_pin: String,
     refresh_interval: Duration,
     next_refresh: Instant,
 }
 
 impl ManagedToken {
-    pub fn new(
-        token_config: config::Token,
-        enclave: Rc<P11neEnclave>,
-        swap_pin: String,
-    ) -> Result<Self, Error> {
+    pub fn new(token_config: config::Token, enclave: Rc<P11neEnclave>) -> Result<Self, Error> {
         let pin = match token_config.pin {
             Some(pin) => pin,
             None => util::generate_pkcs11_pin().map_err(Error::PinGenerationError)?,
@@ -201,8 +190,6 @@ impl ManagedToken {
             db: DbSource::new(token_config.source)?,
             target: token_config.target,
             enclave,
-            is_swapped: false,
-            swap_pin,
             refresh_interval: Duration::from_secs(
                 token_config
                     .refresh_interval_secs
@@ -212,7 +199,7 @@ impl ManagedToken {
         })
     }
 
-    pub fn sync(&mut self) -> Result<(), Error> {
+    pub fn sync(&mut self) -> Result<Option<super::PostSyncAction>, Error> {
         let db_changed = self.db.update()?;
         let is_online = self
             .enclave
@@ -230,12 +217,6 @@ impl ManagedToken {
                     self.label.as_str()
                 );
 
-                debug!("Switching token={} to swap", self.label.as_str());
-                self.swap_on()?;
-
-                debug!("Moving NGINX to swap token");
-                self.satisfy_target_or_pass();
-
                 debug!("Updating token {}", self.label.as_str());
                 self.enclave
                     .rpc(schema::ApiRequest::UpdateToken {
@@ -246,13 +227,15 @@ impl ManagedToken {
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::UpdateTokenError)?;
 
-                self.swap_off();
-
-                debug!("Moving NGINX back from swap");
-                self.satisfy_target_or_pass();
-
-                debug!("Clearing swap");
-                self.clear_swap()?;
+                debug!("Updating NGINX config");
+                self.satisfy_target().or_else(|e| {
+                    error!(
+                        "Unable to satisfy target for token {}: {:?}",
+                        self.label.as_str(),
+                        e
+                    );
+                    Ok(None)
+                })
             }
             (true, true, None) => {
                 info!(
@@ -267,6 +250,7 @@ impl ManagedToken {
                     })
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::UpdateTokenError)?;
+                Ok(None)
             }
             (true, false, _) => {
                 if self.next_refresh <= Instant::now() {
@@ -281,37 +265,29 @@ impl ManagedToken {
                         .map_err(Error::RefreshTokenError)?;
                     self.next_refresh += self.refresh_interval;
                 }
+                Ok(None)
             }
             (false, _, _) => {
+                debug!("Adding token {}", self.label.as_str());
                 self.enclave
                     .rpc(schema::ApiRequest::AddToken {
                         token: self.to_schema_token()?,
                     })
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::AddTokenError)?;
-                self.satisfy_target_or_pass();
+                self.satisfy_target().or_else(|e| {
+                    error!(
+                        "Unable to satisfy target for token {}: {:?}",
+                        self.label.as_str(),
+                        e
+                    );
+                    Ok(None)
+                })
             }
         }
-
-        Ok(())
     }
 
-    fn satisfy_target_or_pass(&self) {
-        self.satisfy_target().unwrap_or_else(|err| {
-            error!(
-                "Unable to satisfy target for token {}: {:?}",
-                self.label.as_str(),
-                err
-            )
-        });
-    }
-
-    fn satisfy_target(&self) -> Result<(), Error> {
-        let token_label = if self.is_swapped {
-            defs::SWAP_TOKEN_LABEL
-        } else {
-            self.label.as_str()
-        };
+    fn satisfy_target(&self) -> Result<Option<super::PostSyncAction>, Error> {
         let (key_id, key_label) = self
             .db
             .to_schema_keys()
@@ -323,19 +299,18 @@ impl ManagedToken {
             "pkcs11:model={};manufacturer={};token={};id=%{:02x};object={};type=private?pin-value={}",
             "p11ne-token",
             "Amazon",
-            token_label,
+            self.label.as_str(),
             key_id,
             key_label.as_str(),
             self.pin.as_str(),
         );
 
         match self.target {
-            None => (),
+            None => Ok(None),
             Some(config::Target::NginxStanza {
                 ref user,
                 ref group,
                 ref path,
-                force_start,
             }) => {
                 let uid = match user.as_ref() {
                     Some(name) => Some(
@@ -362,7 +337,7 @@ impl ManagedToken {
                         let cert_path = format!(
                             "{}/nginx-cert-{}.pem",
                             defs::RUN_DIR,
-                            util::bytes_to_hex(token_label.as_bytes())
+                            util::bytes_to_hex(self.label.as_bytes())
                         );
                         debug!("Writing {}", &cert_path);
                         OpenOptions::new()
@@ -411,11 +386,9 @@ impl ManagedToken {
                         Ok(())
                     })?;
                 debug!("Done writing {}", &path);
-
-                Self::reload_nginx(force_start.unwrap_or(defs::DEFAULT_NGINX_FORCE_START))?;
+                Ok(Some(super::PostSyncAction::ReloadNginx))
             }
         }
-        Ok(())
     }
 
     fn to_schema_token(&self) -> Result<schema::Token, Error> {
@@ -427,38 +400,6 @@ impl ManagedToken {
         })
     }
 
-    fn swap_on(&mut self) -> Result<(), Error> {
-        self.enclave
-            .rpc(schema::ApiRequest::AddToken {
-                token: self.to_schema_token().map(|mut tok| {
-                    tok.label = defs::SWAP_TOKEN_LABEL.to_string();
-                    tok.pin = self.swap_pin.clone();
-                    tok
-                })?,
-            })
-            .map_err(Error::EnclaveError)?
-            .map_err(Error::SwapOnError)?;
-
-        self.is_swapped = true;
-
-        Ok(())
-    }
-
-    fn swap_off(&mut self) {
-        self.is_swapped = false;
-    }
-
-    fn clear_swap(&self) -> Result<(), Error> {
-        self.enclave
-            .rpc(schema::ApiRequest::RemoveToken {
-                label: defs::SWAP_TOKEN_LABEL.to_string(),
-                pin: self.swap_pin.clone(),
-            })
-            .map_err(Error::EnclaveError)?
-            .map_err(Error::SwapOffError)?;
-        Ok(())
-    }
-
     fn kms_envelope_key() -> Result<schema::EnvelopeKey, Error> {
         let creds = imds::creds().map_err(Error::ImdsError)?;
         Ok(schema::EnvelopeKey::Kms {
@@ -467,37 +408,5 @@ impl ManagedToken {
             secret_access_key: creds.secret_access_key,
             session_token: creds.token,
         })
-    }
-
-    fn reload_nginx(force_start: bool) -> Result<(), Error> {
-        Command::new("systemctl")
-            .args(&["is-active", "-q", "nginx.service"])
-            .status()
-            .map_err(Error::SystemdExecError)
-            .and_then(|status| {
-                let cmd = if status.success() {
-                    info!("Reloading NGINX config");
-                    "reload"
-                } else {
-                    if force_start {
-                        info!("NGINX is not running. Starting it now.");
-                        "start"
-                    } else {
-                        error!("Unable to reload NGINX config: nginx.service is inactive and force starting is disabled");
-                        return Err(Error::NginxNotActive);
-                    }
-                };
-                Command::new("systemctl")
-                    .args(&[cmd, "nginx.service"])
-                    .status()
-                    .map_err(Error::SystemdExecError)
-                    .and_then(|status| {
-                        if status.success() {
-                            Ok(())
-                        } else {
-                            Err(Error::NginxReloadError(status.code()))
-                        }
-                    })
-            })
     }
 }
