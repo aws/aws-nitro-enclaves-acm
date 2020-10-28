@@ -1,0 +1,532 @@
+#!/usr/bin/env bash
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+MY_VERSION="1.0"
+MY_NAME="p11ne-cli"
+MY_DESC="p11ne management tool"
+
+EVAULT_DATA_DIR="/usr/share/nitro_enclaves/p11ne"
+EVAULT_EIF_NAME="p11ne.eif"
+EVAULT_EIF_PATH="$EVAULT_DATA_DIR/$EVAULT_EIF_NAME"
+EVAULT_RPC_PORT=10000
+EVAULT_P11KIT_PORT=9999
+EVAULT_PKCS11_CONFIG_FILE="/etc/pkcs11/modules/p11ne.module"
+
+EVAULT_BIN_RPC_CLIENT="p11ne-client"
+EVAULT_BIN_P11_MOD="libvtok_p11.so"
+
+DEFAULT_CPU_COUNT=2
+DEFAULT_MEM_MIB=256
+
+# TODO: make this user-configurable
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_SESSION_TOKEN=
+
+EVAULT_DEVENV="${EVAULT_DEVENV-n}"
+EVAULT_DEVENV_RPC_SOCK="${EVAULT_DEVENV-/tmp/p11ne-rpc.sock}"
+
+
+USAGE="\
+$MY_NAME v$MY_VERSION - $MY_DESC
+Usage: $(basename "$0") <command> [arguments]
+
+Commands:
+
+    start           Start the p11ne enclave
+        --cpu-count     The number of vCPUs to allocate for the p11ne enclave.
+        --memory        p11ne enclave memory size, in MiB.
+
+    init-token      Initialize an p11ne token
+        --key-db        The database file to be loaded into p11ne for this token.
+                        See \`p11ne-db help\` for information on generating this file.
+        --label         The token PKCS#11 label; a UTF-8 string, between 1 and 32 bytes long.
+                        Note: the token label must be unique across all p11ne tokens.
+        --pin           The PIN that should be used to secure access to this token;
+                        a UTF-8 string, between 4 and 64 bytes long.
+
+    refresh-token   Refresh an p11ne token
+        --label         Token label.
+        --pin           The PIN used to access this token (previously set via an init-token
+                        operation).
+
+    release-token   Release an p11ne token
+        --label         The label that (uniquely) identifies the token to be released.
+        --pin           The PIN used to access this token (previously set via an init-token
+                        operation).
+
+    describe-device Get information about the p11ne device
+
+    describe-token  Get information about an p11ne vToken
+        --label         The label that (uniquely) identifies the token to be released.
+        --pin           The PIN used to access this token (previously set via an init-token
+                        operation).
+
+    stop            Stop the p11ne enclave
+"
+
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    local code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit "$code"
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    local code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Send an error-decorated text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a warning-decorated text message to stderr
+#
+say_warn() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 3)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a decorated message to stdout, followed by a new line
+#
+say() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Get the p11ne image path
+#
+p11ne_eif_path() {
+    echo "$EVAULT_EIF_PATH"
+}
+
+p11ne_rpc_server_addr() {
+    if [[ "$EVAULT_DEVENV" != y ]]; then
+        local cid=$(nitro-cli describe-enclaves | jq ".[] | .EnclaveCID")
+        [[ -n "$cid" ]] || return 1
+        echo "vsock:$cid:$EVAULT_RPC_PORT"
+    else
+        echo "unix:$EVAULT_DEVENV_RPC_SOCK"
+    fi
+}
+
+# Ensure the p11ne image is present
+#
+ensure_eif() {
+    local path=$(p11ne_eif_path)
+    [[ -f "$path" ]] || die "Error: p11ne EIF not found at $path"
+    [[ -r "$path" ]] || die "Error: cannot read p11ne EIF from $path"
+}
+
+# Ensure nitro-cli tool is installed
+#
+ensure_nitro_cli() {
+    which nitro-cli > /dev/null 2>&1
+    ok_or_die "The nitro-cli tool is not installed. Aborting."
+}
+
+# Ensure we have a valid set of AWS credentials (fetched from IMDS)
+#
+ensure_aws_creds() {
+    local role
+    role=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/)
+    ok_or_die "Unable to get the IAM info for this instance role." \
+        "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
+    local creds_json
+    creds_json=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role")
+    ok_or_die "Unable to find instance role credentials." \
+        "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
+    AWS_ACCESS_KEY_ID=$(echo "$creds_json" | jq -er ".AccessKeyId")
+    ok_or_die "Unable to parse instance role credentials."
+    AWS_SECRET_ACCESS_KEY=$(echo "$creds_json" | jq -er ".SecretAccessKey")
+    ok_or_die "Unable to parse instance role credentials."
+    AWS_SESSION_TOKEN=$(echo "$creds_json" | jq -er ".Token")
+    ok_or_die "Unable to parse instance role credentials."
+}
+
+ensure_vsock_proxy() {
+    # TODO: remove this once we stabilize vsock-proxy.
+    systemctl is-active -q nitro-enclaves-vsock-proxy || {
+        say "nitro-enclaves-vsock-proxy is not running. Trying to bring it up now ..."
+        sudo systemctl start nitro-enclaves-vsock-proxy
+        sleep 2
+    }
+    systemctl is-active -q nitro-enclaves-vsock-proxy
+    ok_or_die "Failed to start nitro-enclaves-vsock-proxy"
+}
+
+ensure_enclave_resources() {
+    local help="
+    You can make sure that enough resources are reserved for the Nitro enclave
+    by running nitro-cli-config shortly after instance boot:
+
+        nitro-cli-config -t <number of CPUs to reserve> -m <memory MiB to reserve>
+    "
+
+    local enclave_cpus=$(cat /sys/module/nitro_enclaves/parameters/ne_cpus | \
+        sed "s/,/\\n/g" | sed "s/-/ /g" | \
+        while read a b; do [[ -n $b ]] && seq $a $b || echo $a; done | \
+        wc -w
+    )
+
+    [[ $enclave_cpus -gt 0 ]] || {
+        say_err "Enclave CPUs and memory haven't been reserved."
+        echo "$help" 1>&2
+        exit 1
+    }
+}
+
+# Keep p11-kit client-side configuration in sync with the current
+# p11ne enclave vsock CID.
+#
+create_pkcs11_config() {
+    local cid
+    cid=$(nitro-cli describe-enclaves | jq '.[] | .EnclaveCID')
+    [[ -n "$cid" ]] || "Cannot get p11ne enclave CID."
+
+    local conf
+    conf="remote:vsock:cid=$cid;port=$EVAULT_P11KIT_PORT"
+    conf="$conf\nmodule:$EVAULT_BIN_P11_MOD"
+
+    {
+        mkdir -p "$(dirname "$EVAULT_PKCS11_CONFIG_FILE")" \
+            && echo -e "$conf" > "$EVAULT_PKCS11_CONFIG_FILE"
+    } 2> /dev/null
+    [[ $? -eq 0 ]] && [ -t 1 ] || {
+        say "$MY_NAME requires permission to create $EVAULT_PKCS11_CONFIG_FILE." \
+            "Trying sudo ..."
+        sudo mkdir -p "$(dirname "$EVAULT_PKCS11_CONFIG_FILE")" \
+            && { echo -e "$conf" | sudo tee  "$EVAULT_PKCS11_CONFIG_FILE"; } > /dev/null
+    }
+    ok_or_die "Cannot write PKCS#11 p11ne config to $EVAULT_PKCS11_CONFIG_FILE"
+    say "Successfully created PKCS#11 config at $EVAULT_PKCS11_CONFIG_FILE"
+}
+
+# Cleanup module configuration
+#
+remove_pkcs11_config() {
+    rm -f "$EVAULT_PKCS11_CONFIG_FILE" 2> /dev/null
+    [[ $? -eq 0 ]] && [ -t 1 ] || {
+        say "$MY_NAME requires permission to remove $EVAULT_PKCS11_CONFIG_FILE." \
+            "Trying sudo ..."
+        sudo rm -f "$EVAULT_PKCS11_CONFIG_FILE"
+    }
+    [[ $? -eq 0 ]] \
+        && say "Removed $EVAULT_PKCS11_CONFIG_FILE" \
+        || say_warn "Unable to remove $EVAULT_PKCS11_CONFIG_FILE"
+}
+
+# Print usage
+#
+cmd_help() {
+    echo "$USAGE"
+}
+
+# Start the p11ne
+#
+cmd_start() {
+
+    [[ "$EVAULT_DEVENV" = y ]] \
+        && die \
+            "You are running in an emulated dev container." \
+            "You can use \`devtool simulate-enclave\` on the host machine to start up" \
+            "an enclave-emulating dev container."
+
+    ensure_nitro_cli
+    ensure_eif
+    ensure_enclave_resources
+    ensure_vsock_proxy
+
+    local cpu_count=$DEFAULT_CPU_COUNT
+    local memory=$DEFAULT_MEM_MIB
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --cpu-count) cpu_count="$2"; shift ;;
+            --memory) memory="$2"; shift ;;
+            *) die "Unknown arg: $1. Please use \`$MY_NAME help \` for help." ;;
+        esac
+        shift
+    done
+
+    # Check if an enclave is already running.
+    local id
+    id=$(nitro-cli describe-enclaves | jq -r '.[] | .EnclaveID')
+    if [ ! -z "$id" ]; then
+        die "An enclave is already running."
+    fi
+
+    # Spawn the p11ne enclave
+    nitro-cli run-enclave \
+        --cpu-count "$cpu_count" \
+        --memory "$memory" \
+        --eif-path "$(p11ne_eif_path)" \
+            > /dev/null 2>&1
+    ok_or_die "Cannot start the p11ne enclave." \
+        "Have enough resources been allocated via nitro-cli-config?"
+
+    say "Successfully started the p11ne enclave."
+
+    create_pkcs11_config
+}
+
+# Stop the p11ne
+#
+cmd_stop() {
+    [[ "$EVAULT_DEVENV" = y ]] \
+        && die \
+            "You are running in an emulated dev container." \
+            "You can use \`devtool simulate-enclave\` on the host machine to start up" \
+            "an enclave-emulating dev container."
+
+    ensure_nitro_cli
+
+    if [ "$#" -ne 0 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    local id
+    id=$(nitro-cli describe-enclaves | jq -r '.[] | .EnclaveID')
+    if [ -z "$id" ]; then
+        die "No p11ne enclave is currently running."
+    fi
+
+    nitro-cli terminate-enclave --enclave-id "$id" > /dev/null 2>&1
+    ok_or_die "Cannot stop the p11ne enclave."
+
+    say "Successfully stopped the p11ne enclave."
+
+    remove_pkcs11_config
+}
+
+# Issue a RPC call
+#
+execute_rpc() {
+    if [ "$#" -ne 1 ]; then
+        die "Bad execute_rpc() call."
+    fi
+
+    local rpc_request
+    local rpc_addr
+    rpc_request="$1"
+    rpc_addr="$(p11ne_rpc_server_addr)"
+    [[ -n $rpc_addr ]] || die "The p11ne enclave is not running."
+
+    # Execute the RPC
+    local result
+    result=$(
+        echo "$rpc_request" | $EVAULT_BIN_RPC_CLIENT raw-rpc --server "$rpc_addr"
+    )
+    echo "$result"
+}
+
+# Initialize a token
+#
+cmd_init-token() {
+    ensure_aws_creds
+
+    local key_db=
+    local label=
+    local pin=
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --key-db) key_db="$2"; shift ;;
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            *) die "Invalid arguments. Please use \`$MY_NAME help\` for help." ;;
+        esac
+        shift
+    done
+    [[ -n "$key_db" ]] || die "Error: missing key database."
+    [[ -r "$key_db" ]] || die "Error: key database \"$key_db\" is not a readable file."
+    [[ -n "$label" ]] || die "Error: missing token label."
+    [[ -n "$pin" ]] || die "Error: missing token PIN."
+
+    local keys
+    keys="$(<"$key_db")"
+
+    # The envelope key
+    local envelope_key
+    envelope_key=$( jq -Rn \
+                --arg a "$AWS_ACCESS_KEY_ID" \
+                --arg b "$AWS_SECRET_ACCESS_KEY" \
+                --arg c "$AWS_SESSION_TOKEN" \
+                --arg d "$AWS_REGION" \
+                '{Kms: {access_key_id: $a, secret_access_key: $b, session_token: $c, region: $d}}')
+    ok_or_die "Cannot construct Kms credentials."
+
+    # AddToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            --argjson c "$envelope_key" \
+            --argjson d "$keys" \
+            '{AddToken: {token: {label: $a, pin: $b, envelope_key: $c, keys: $d }}}')
+    ok_or_die "Cannot construct p11ne token initialization message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$rpc_request")
+    echo "$result" | jq
+}
+
+# Refresh a token
+#
+cmd_refresh-token() {
+    ensure_aws_creds
+
+    local label=
+    local pin=
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            *) die "Invalid arguments. Please use \`$MY_NAME help\` for help." ;;
+        esac
+        shift
+    done
+    [[ -n "$label" ]] || die "Error: missing token label."
+    [[ -n "$pin" ]] || die "Error: missing token PIN."
+
+    # The envelope key
+    local envelope_key
+    envelope_key=$( jq -Rn \
+                --arg a "$AWS_ACCESS_KEY_ID" \
+                --arg b "$AWS_SECRET_ACCESS_KEY" \
+                --arg c "$AWS_SESSION_TOKEN" \
+                --arg d "$AWS_REGION" \
+                '{Kms: {access_key_id: $a, secret_access_key: $b, session_token: $c, region: $d}}')
+    ok_or_die "Cannot construct Kms credentials."
+
+    # RefreshToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            --argjson c "$envelope_key" \
+            '{RefreshToken: {label: $a, pin: $b, envelope_key: $c}}')
+    ok_or_die "Cannot construct p11ne token refresh message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$rpc_request")
+    echo "$result" | jq
+}
+
+# Release a token
+#
+cmd_release-token() {
+
+    local label=
+    local pin=
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            *) die "Invalid arguments. Please use \`$MY_NAME help\` for help." ;;
+        esac
+        shift
+    done
+    [[ -n "$label" ]] || die "Error: missing token label."
+    [[ -n "$pin" ]] || die "Error: missing token PIN."
+
+    # RemoveToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            '{RemoveToken: {label: $a, pin: $b}}')
+    ok_or_die "Cannot construct p11ne token release message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$rpc_request")
+    echo "$result" | jq
+}
+
+# Get the device status
+#
+cmd_describe-device() {
+
+    if [ "$#" -ne 0 ]; then
+        die "Invalid arguments. Please use \`$MY_NAME help\` for help."
+    fi
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "{\"DescribeDevice\": null}")
+    echo "$result" | jq
+}
+
+# Describe a token
+#
+cmd_describe-token() {
+
+    local label=
+    local pin=
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --label) label="$2"; shift ;;
+            --pin) pin="$2"; shift ;;
+            *) die "Invalid arguments. Please use \`$MY_NAME help\` for help." ;;
+        esac
+        shift
+    done
+    [[ -n "$label" ]] || die "Error: missing token label."
+    [[ -n "$pin" ]] || die "Error: missing token PIN."
+
+    # DescribeToken RPC
+    local rpc_request
+    rpc_request=$( jq -Rn \
+            --arg a "$label" \
+            --arg b "$pin" \
+            '{DescribeToken: {label: $a, pin: $b}}')
+    ok_or_die "Cannot construct p11ne describe token message."
+
+    # Execute RPC
+    local result
+    result=$(execute_rpc "$rpc_request")
+    echo "$result" | jq
+}
+
+main() {
+
+    if [ "$#" -eq 0 ]; then
+        cmd_help
+        exit 1
+    fi
+
+    local cmd="$1"
+    case "$1" in
+        -h|--help)
+            cmd_help
+            exit 1
+            ;;
+        *)
+            declare -f "cmd_$cmd" > /dev/null
+            ok_or_die "Unknown command: $1. Please use \`$MY_NAME help\` for help."
+            cmd_"$@"
+            ;;
+    esac
+}
+
+main "${@}"

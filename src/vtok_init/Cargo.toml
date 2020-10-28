@@ -1,0 +1,10 @@
+[package]
+name = "vtok_init"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "p11ne enclave init application"
+
+[[bin]]
+name = "p11ne-init"
+path = "src/main.rs"

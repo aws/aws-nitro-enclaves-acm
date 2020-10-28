@@ -1,0 +1,20 @@
+[Unit]
+Description=Nitro Enclaves ACM Agent
+After=network-online.target
+DefaultDependencies=no
+Requires=nitro-enclaves-allocator.service
+After=nitro-enclaves-allocator.service
+Before=nginx.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/mkdir -p /run/nitro_enclaves/acm
+ExecStart=/usr/bin/p11ne-agent
+ExecStopPost=/usr/bin/rm -r /run/nitro_enclaves/acm
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

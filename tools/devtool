@@ -1,0 +1,646 @@
+#!/usr/bin/env bash
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Dev container versions. These should be incremented every time a change is made to their
+# respective containers.
+ENCLAVE_CTR_VERSION="1"
+PARENT_CTR_VERSION="1"
+
+MY_NAME="p11ne devtool"
+ENCLAVE_CTR="p11ne-enclave"
+ENCLAVE_CTR_IMG="$ENCLAVE_CTR:$ENCLAVE_CTR_VERSION"
+PARENT_CTR="p11ne-parent"
+PARENT_CTR_IMG="$PARENT_CTR:$PARENT_CTR_VERSION"
+
+THIS_DIR="$(cd "$(dirname "$0")" && pwd)"
+EVAULT_SRC_DIR="$(cd "$THIS_DIR/.." && pwd)"
+EVAULT_BUILD_DIR="$EVAULT_SRC_DIR/build"
+EVAULT_RUN_DIR="$EVAULT_BUILD_DIR/run"
+
+CTR_SRC_DIR="/p11ne.src"
+CTR_BUILD_DIR="$CTR_SRC_DIR/build"
+CTR_RUN_DIR="$CTR_BUILD_DIR/run"
+CTR_HOME="$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)")"
+
+EVBIN_AGENT=p11ne-agent
+EVBIN_RPC_CLIENT=p11ne-client
+EVBIN_RPC_SERVER=p11ne-server
+EVBIN_RAND=p11ne-rand
+EVBIN_CLI=p11ne-cli
+EVBIN_INIT=p11ne-init
+EVBIN_P11_MOD=libvtok_p11.so
+
+EVAULT_RUST_TOOLCHAIN=1.46.0
+
+USAGE="\
+$MY_NAME
+Usage: $(basename "$0") <command>
+
+Commands:
+
+    build [--release] [<target>] [<target>] ... [<target>]
+        Build the p11ne binaries specified by <target>.
+        Each <target> must be one of:
+            $EVBIN_RPC_CLIENT - the p11ne RPC client (parent-instance-side binary);
+            $EVBIN_RPC_SERVER - the p11ne RPC server (enclave-side binary);
+            $EVBIN_RAND - the p11ne random seeder (enclave-side binary);
+            $EVBIN_INIT - the p11ne enclave init (enclave-side binary);
+            $EVBIN_P11_MOD - the p11ne PKCS#11 provider dyn lib (enclave-side binary);
+            dev-image - the development version (i.e. not signed) of the  p11ne enclave image (EIF);
+            production-image - the signed production version of the eVault enclave image (EIF), when specified
+                               the directory containing the signing info and the key and certificate themselves
+                               needs to be provided;
+            enclave-bins - all enclave-side binaries;
+            parent-bins - all parent-side binaries;
+            all - all p11ne (release) binaries;
+            al2-setup - the p11ne AL2 installer; the tarball built here can be
+                        used to install p11ne on an Amazon Linux 2 machine.
+        If no arguments are passed, the build process will default to \`all\`.
+
+    clean
+         Clean up all build artefacts.
+
+    simulate-parent
+        Run the parent instance dev/build container, dropping to a shell inside the
+        container.
+        Note: before starting the parent, an enclave container should be running.
+              The enclave container will open the p11-kit server socket to which
+              the parent-side p11-kit client will connect.
+
+    simulate-enclave
+        Mock-run the p11ne enclave by using a local Docker container. This will
+        start the p11ne RPC server and p11-kit server in foreground mode, so that
+        their logs and STDERR output show up at the terminal.
+        Use \`simulate-parent\` to interact with the running enclave container.
+"
+
+
+# Send a decorated message to stdout, followed by a new line
+#
+say() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Send a decorated message to stdout, without a trailing new line
+#
+say_noln() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo -n "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Send a text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a warning-highlighted text to stdout
+say_warn() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 3)[$MY_NAME] $*$(tput sgr0)" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    local code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit $code
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    local code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+
+# Prompt the user for confirmation before proceeding.
+# Args:
+#   $1  prompt text.
+#       Default: Continue? (y/n)
+#   $2  confirmation input.
+#       Default: y
+# Return:
+#   exit code 0 for successful confirmation
+#   exit code != 0 if the user declined
+#
+get_user_confirmation() {
+    # Fail if STDIN is not a terminal (there's no user to confirm anything)
+    [[ -t 0 ]] || return 1
+
+    # Otherwise, ask the user
+    #
+    local msg=$([ -n "$1" ] && echo -n "$1" || echo -n "Continue? (y/n) ")
+    local yes=$([ -n "$2" ] && echo -n "$2" || echo -n "y")
+    say_noln "$msg"
+    read c && [ "$c" = "$yes" ] && return 0
+    return 1
+}
+
+# Check if a container (given by name) is running, and, if so, echo its ID at
+# stdout.
+# Args:
+#   $1  container name
+# Return:
+#   stdout: container ID
+#   exit code: 0 if the container was found running;
+#              != 0 otherwise
+get_running_container_id() {
+    local ctr_name="$1"
+    local ctr_id=$(docker ps --filter "name=$ctr_name" --format "{{.ID}}")
+    if [[ -z "$ctr_id" ]]; then
+        return 1
+    fi
+    echo "$ctr_id"
+}
+
+# Make sure the dirs we need to build and run/test are there.
+# Exit with an error message if that's no the case. Upon returning from this call,
+# the caller can be certain the build dirs are available.
+#
+ensure_build_dirs() {
+    mkdir -p "$EVAULT_BUILD_DIR"
+    ok_or_die "Unable to create dir $EVAULT_BUILD_DIR"
+    mkdir -p "$EVAULT_RUN_DIR"
+    ok_or_die "Unable to create dir $EVAULT_RUN_DIR"
+}
+
+# Check if Docker is available and exit if it's not.
+# Upon returning from this call, the caller can be certain Docker is available.
+#
+ensure_docker() {
+    which docker > /dev/null 2>&1
+    ok_or_die "Docker not found. Aborting." \
+        "Please make sure you have Docker (http://docker.com) installed" \
+        "and properly configured."
+
+    docker ps > /dev/null 2>&1
+    ok_or_die "Error accessing Docker. Please make sure the Docker daemon" \
+        "is running and that you are part of the docker group." \
+        "For more information, see" \
+        "https://docs.docker.com/install/linux/linux-postinstall/"
+}
+
+ensure_github_creds() {
+    [ -z "$EVAULT_GITHUB_CREDS" ] && {
+        EVAULT_GITHUB_CREDS=$(\
+            cat $HOME/.git-credentials \
+                | sed -n -r "s|https://([^:]+):([^@]+)@github.com|\\1:\\2|p" \
+            )
+    }
+    [ -z "$EVAULT_GITHUB_CREDS" ] && \
+        die "Unable to locate GitHub credentials." \
+            "Please either set EVAULT_GITHUB_CREDS to \$GITHUB_USER:\$GITHUB_PASS" \
+            "or login to GitHub, so that $HOME/.git-credentials gets populated."
+}
+
+# Make sure that the enclave dev container is available. If the (needed version of)
+# the container is not available, attempt to build it now.
+#
+ensure_enclave_ctr() {
+    ensure_docker
+
+    [[ $(docker images -q "$ENCLAVE_CTR_IMG" | wc -l) -gt 0 ]] || {
+        say "Docker container $ENCLAVE_CTR_IMG not found. Will build it now..."
+        build_enclave_ctr
+    }
+    ok_or_die "Enclave dev container build failed."
+}
+
+ensure_parent_ctr() {
+    ensure_docker
+
+    [[ $(docker images -q "$PARENT_CTR_IMG" | wc -l) -gt 0 ]] || {
+        say "Docker container $PARENT_CTR_IMG not found. Will build it now..."
+        build_parent_ctr
+    }
+    ok_or_die "Parent dev container build failed."
+}
+
+# Args:
+#   $1 - nitro-cli install dir
+build_nitro_cli() {
+    ensure_docker
+    ensure_build_dirs
+    ensure_github_creds
+
+    local install_dir="$1"
+    local src_dir="$EVAULT_BUILD_DIR/aws-nitro-enclaves-cli"
+
+    [[ -d "$src_dir" ]] || {
+        pushd "$EVAULT_BUILD_DIR" \
+            && git clone https://$EVAULT_GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-cli \
+            && popd
+        ok_or_die "Error fetching nitro-cli sources."
+    }
+
+    mkdir -p "$install_dir"
+    ok_or_die "Error creating nitro-cli temp install dir: $install_dir"
+
+    # Build & install nitro-cli to our temp install dir
+    local nitro_cli_ver=05d52c6dded86c79be08d5d4dd04575cc72c86de
+    pushd "$src_dir" \
+        && git fetch origin \
+        && git reset --hard $nitro_cli_ver \
+        && make nitro-cli vsock-proxy \
+        && NITRO_CLI_INSTALL_DIR="$install_dir" make install-tools \
+        && popd
+    ok_or_die "nitro-cli build failed."
+}
+
+build_parent_ctr() {
+    ensure_docker
+    ensure_build_dirs
+    ensure_github_creds
+
+    local ctx_dir="$EVAULT_BUILD_DIR/parent.ctx"
+    rm -rf "$ctx_dir" \
+        && cp -rf "$EVAULT_SRC_DIR/env/parent" "$ctx_dir"
+    ok_or_die "Error setting up context dir: $ctx_dir"
+
+    build_nitro_cli "$ctx_dir/install"
+    ok_or_die "nitro-cli build failed."
+
+    docker build -t "$PARENT_CTR_IMG" \
+        --build-arg USER=$(whoami) \
+        --build-arg USER_ID=$(id -u) \
+        --build-arg GROUP_ID=$(id -g) \
+        --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
+        --build-arg CTR_HOME="$CTR_HOME" \
+        "$ctx_dir"
+}
+
+build_enclave_ctr() {
+    ensure_docker
+    ensure_build_dirs
+    ensure_github_creds
+
+    docker build -t "$ENCLAVE_CTR_IMG" \
+        --build-arg USER=$(whoami) \
+        --build-arg USER_ID=$(id -u) \
+        --build-arg GROUP_ID=$(id -g) \
+        --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
+        --build-arg GITHUB_CREDS="$EVAULT_GITHUB_CREDS" \
+        --build-arg CTR_HOME="$CTR_HOME" \
+        "$EVAULT_SRC_DIR/env/enclave"
+}
+
+build_eif() {
+    ensure_enclave_ctr
+    ensure_parent_ctr
+
+    local ctx_dir="$EVAULT_BUILD_DIR/eif.ctx"
+    local eif_signing_dir=$1
+    local eif_signing_cert=$2
+    local eif_signing_key=$3
+    rm -rf "$ctx_dir" && cp -rf "$EVAULT_SRC_DIR/env/eif" "$ctx_dir"
+    ok_or_die "Unable to setup EIF docker context dir: $ctx_dir"
+
+    cmd_build --release enclave-bins
+    ok_or_die "Unable to build p11ne enclave binaries."
+
+    local bins=(
+        "$EVAULT_BUILD_DIR/target/release/$EVBIN_RPC_SERVER"
+        "$EVAULT_BUILD_DIR/target/release/$EVBIN_RAND"
+        "$EVAULT_BUILD_DIR/target/release/$EVBIN_INIT"
+        "$EVAULT_BUILD_DIR/target/release/$EVBIN_P11_MOD"
+    )
+    cp -f "${bins[@]}" "$ctx_dir/"
+    ok_or_die "Unable to populate EIF context dir: $ctx_dir"
+
+    # TODO: make really sure that we are not messing up an already existing
+    # container image here.
+    local eif_tag="p11ne-eif-tmp-ctr:latest"
+    docker build -t "$eif_tag" \
+        --build-arg BASE_IMG="$ENCLAVE_CTR_IMG" \
+        --build-arg EVBIN_RPC_SERVER="$EVBIN_RPC_SERVER" \
+        --build-arg EVBIN_RAND="$EVBIN_RAND" \
+        --build-arg EVBIN_INIT="$EVBIN_INIT" \
+        --build-arg EVBIN_P11_MOD="$EVBIN_P11_MOD" \
+        "$ctx_dir"
+    ok_or_die "EIF container build failed."
+
+    # TODO: detect docker socket path
+    local docker_gid=$(ls -n /var/run/docker.sock | cut -d " " -f4)
+    [[ -z "$docker_gid" ]] && die "Unable to find docker socket at /var/run/docker.sock"
+    
+    if [[ "$eif_signing_dir" != "" ]]; then
+	signing_extra_docker_args="-v $eif_signing_dir:$eif_signing_dir"
+	signing_extra_build_args="--private-key $eif_signing_key --signing-certificate $eif_signing_cert"
+    fi
+
+    local interactive=
+    [[ -t 1 ]] && interactive="-it"
+    docker run --rm $interactive \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+	$signing_extra_docker_args \
+        --user "$(id -u):$docker_gid" \
+        "$PARENT_CTR_IMG" \
+        nitro-cli build-enclave \
+            --docker-uri "$eif_tag" \
+            $signing_extra_build_args \
+            --output-file "$CTR_BUILD_DIR/p11ne.eif" \
+            > "$EVAULT_BUILD_DIR/image-measurements.json"
+
+    ok_or_die "EIF build failed."
+
+    say "Built: $EVAULT_BUILD_DIR/p11ne.eif"
+    say "Measurements: $EVAULT_BUILD_DIR/image-measurements.json"
+
+    docker rmi "$eif_tag" > /dev/null
+}
+
+build_al2_setup() {
+    ensure_github_creds
+
+    local setup_dir="$EVAULT_BUILD_DIR/al2-setup"
+    rm -rf "$setup_dir" && mkdir -p "$setup_dir"
+    ok_or_die "Unable to create AMI setup dir: $setup_dir"
+
+    build_nitro_cli "$setup_dir/install"
+    ok_or_die "nitro-cli build failed."
+
+    cmd_build --release parent-bins
+    ok_or_die "p11ne parent binaries build failed."
+
+    cmd_build dev-image
+    ok_or_die "EIF build failed."
+
+    local my_data_dir="/usr/share/nitro_enclaves/p11ne"
+    local my_sysconf_dir="/etc/nitro_enclaves"
+
+    pushd "$setup_dir" \
+        && install -D -m 0755 \
+            "$EVAULT_BUILD_DIR/target/release/$EVBIN_RPC_CLIENT" \
+            "install/usr/bin/$EVBIN_RPC_CLIENT" \
+        && install -D -m 0755 \
+            "$EVAULT_SRC_DIR/tools/p11ne-cli" \
+            "install/usr/bin/p11ne-cli" \
+        && install -D -m 0755 \
+            "$EVAULT_SRC_DIR/tools/p11ne-db" \
+            "install/usr/bin/p11ne-db" \
+        && install -D -m 0644 \
+            "$EVAULT_BUILD_DIR/p11ne.eif" \
+            "install${my_data_dir}/p11ne.eif" \
+        && install -D -m 0644 \
+            "$EVAULT_BUILD_DIR/image-measurements.json" \
+            "install/${my_data_dir}/image-measurements.json" \
+        && install -D -m 0755 \
+            "$EVAULT_BUILD_DIR/target/release/$EVBIN_AGENT" \
+            "install/usr/bin/$EVBIN_AGENT" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/src/vtok_agent/service/nitro-enclaves-acm.service" \
+            "install/usr/lib/systemd/system/nitro-enclaves-acm.service" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/src/vtok_agent/service/acm.example.yaml" \
+            "install${my_data_dir}/acm.example.yaml" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/src/vtok_agent/service/acm.example.yaml" \
+            "install${my_sysconf_dir}/acm.example.yaml" \
+        && install -D -m 0755 \
+            "$EVAULT_SRC_DIR/env/parent/setup.sh" \
+            "./setup.sh"
+    ok_or_die "Error creating AMI setup context."
+    popd
+
+    pushd "$(dirname "$setup_dir")" \
+        && tar --owner=0 --group=0 -czf "$(basename "$setup_dir").tar.gz" "$(basename "$setup_dir")"
+    ok_or_die "Error archiving ami setup context."
+    popd
+
+    say "AMI setup created: ${setup_dir}.tar.gz"
+}
+
+cmd_help() {
+    echo "$USAGE"
+}
+
+# Clean-up build artefacts generated by `$0 build`.
+#
+cmd_clean() {
+    rm -rf "$EVAULT_BUILD_DIR/target"
+    rm -rf "$EVAULT_BUILD_DIR/parent.ctx"
+    rm -rf "$EVAULT_BUILD_DIR/eif.ctx"
+    rm -rf "$EVAULT_BUILD_DIR/al2-setup"
+    rm -rf "$EVAULT_BUILD_DIR/al2-setup.tar.gz"
+    rm -rf "$EVAULT_BUILD_DIR/aws-nitro-enclaves-cli"
+    rm -rf "$EVAULT_BUILD_DIR/p11ne.eif"
+    rm -rf "$EVAULT_BUILD_DIR/image-measurements.json"
+}
+
+cmd_build() {
+    local enclave_bins=()
+    local parent_bins=()
+    local al2_setup=
+    local p11_mod=
+    local eif=
+    local eif_signing_dir=
+    local eif_signing_cert=
+    local eif_signing_key=
+    local cargo_args=()
+    local interactive=
+    local bin_dir="$EVAULT_BUILD_DIR/target/debug"
+
+    if [[ $# -eq 0 ]] || [[ "$1" = all ]]; then
+        cmd_build --release enclave-bins parent-bins dev-image al2-setup
+        return $?
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            "$EVBIN_AGENT")
+                parent_bins+=("$EVBIN_AGENT")
+                ;;
+            "$EVBIN_RPC_CLIENT")
+                parent_bins+=("$EVBIN_RPC_CLIENT")
+                ;;
+            "$EVBIN_RPC_SERVER")
+                enclave_bins+=("$EVBIN_RPC_SERVER")
+                ;;
+            "$EVBIN_RAND")
+                enclave_bins+=("$EVBIN_RAND")
+                ;;
+            "$EVBIN_INIT")
+                enclave_bins+=("$EVBIN_INIT")
+                ;;
+            "$EVBIN_P11_MOD")
+                p11_mod=y
+                ;;
+            dev-image)
+                eif=y
+                ;;
+            production-image)
+                eif=y
+                eif_signing_dir=$2
+                eif_signing_cert=$3
+                eif_signing_key=$4
+                shift 3
+                ;;
+            enclave-bins)
+                enclave_bins=("$EVBIN_RPC_SERVER" "$EVBIN_RAND" "$EVBIN_INIT")
+                p11_mod=y
+                ;;
+            parent-bins)
+                parent_bins=("$EVBIN_AGENT" "$EVBIN_RPC_CLIENT")
+                ;;
+            al2-setup)
+                al2_setup=y
+                ;;
+            --release)
+                cargo_args+=("--release")
+                bin_dir="$EVAULT_BUILD_DIR/target/release"
+                ;;
+            *)
+                die "Unexpected argument: $1. Use \`$MY_NAME help\` for help."
+                ;;
+        esac
+        shift
+    done
+
+    #Is the shell interactive?
+    if [[ -t 1 ]]; then
+        interactive="-it"
+    fi
+
+    # Build enclave-side binaries
+    for ev_bin in "${enclave_bins[@]}"; do
+        ensure_enclave_ctr
+        docker run --rm $interactive \
+            -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+            --workdir "$CTR_SRC_DIR" \
+            "$ENCLAVE_CTR_IMG" \
+            cargo build "${cargo_args[@]}" --bin "$ev_bin"
+        ok_or_die "$ev_bin failed"
+        say "Built: $bin_dir/$ev_bin"
+    done
+
+    # Build parent-instance-side binaries
+    for ev_bin in "${parent_bins[@]}"; do
+        ensure_parent_ctr
+        docker run --rm $interactive \
+            -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+            --workdir "$CTR_SRC_DIR" \
+            "$PARENT_CTR_IMG" \
+            cargo build "${cargo_args[@]}" --bin "$ev_bin"
+        ok_or_die "$ev_bin build failed"
+        say "Built: $bin_dir/$ev_bin"
+    done
+
+    # Build the p11ne PKCS#11 provider dynlib
+    if [[ "$p11_mod" = y ]]; then
+        ensure_enclave_ctr
+        docker run --rm $interactive \
+            -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+            --workdir "$CTR_SRC_DIR" \
+            "$ENCLAVE_CTR_IMG" \
+            cargo build "${cargo_args[@]}" --lib
+        ok_or_die "$EVBIN_P11_MOD build failed."
+        say "Built: $bin_dir/$EVBIN_P11_MOD"
+    fi
+
+    # Build the p11ne EIF image
+    if [[ "$eif" = y ]]; then
+        build_eif "$eif_signing_dir" "$eif_signing_cert" "$eif_signing_key"
+    fi
+
+    # Build the AMI setup tarball
+    if [[ "$al2_setup" = y ]]; then
+        build_al2_setup
+    fi
+}
+
+# Run the dev container in enclave mode (i.e. with the p11-kit server having loaded our
+# PKCS#11 provider module, and listening on its Unix socket for client connections).
+cmd_simulate-enclave() {
+    ensure_build_dirs
+    ensure_enclave_ctr
+
+    local ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
+    [[ -n $ctr_id ]] \
+        && die "An enclave container is already running with id $ctr_id." \
+            "Kill it, then try again."
+
+    cmd_build enclave-bins
+    ok_or_die "Build failed."
+
+    rm -f "$EVAULT_RUN_DIR"/*.sock
+
+    # WARNING: tread with care.
+    # This is currently launching p11-kit server successfully. You will get no warning
+    # if p11-kit fails. It has the error reporting skills of a soviet nuclear power
+    # plant manager. In p11-kit land, error reports you.
+    docker run --rm -it \
+        --name "$ENCLAVE_CTR" \
+        --env EVAULT_BIN_DIR="$CTR_BUILD_DIR/target/debug" \
+        --env EVAULT_RUN_DIR="$CTR_RUN_DIR" \
+        --workdir "$CTR_RUN_DIR" \
+        -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+        "$ENCLAVE_CTR_IMG" \
+        sh -c "
+            $CTR_BUILD_DIR/target/debug/$EVBIN_RPC_SERVER unix $CTR_RUN_DIR/rpc.sock &
+            p11-kit server \
+                -n unix:path=./p11kit.sock \
+                --provider \"$CTR_BUILD_DIR/target/debug/$EVBIN_P11_MOD\" \
+                -f -v pkcs11:
+        "
+}
+
+# Run the dev container, in parent instance mode (i.e. with the p11-kit client configured
+# to look for the vtok shared module over the Unix socket exposed by the enclave container).
+cmd_simulate-parent() {
+    ensure_parent_ctr
+
+    cmd_build parent-bins
+    ok_or_die "Build failed."
+
+    local ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
+    if [[ -n $ctr_id ]]; then
+        say_warn "Enclave container is not runing. Use \`$0 simulate-enclave\` to start it."
+    fi
+
+    docker run --rm -it \
+        --env EVAULT_DEVENV=y \
+        --env EVAULT_DEVENV_RPC_SOCK="$CTR_RUN_DIR/rpc.sock" \
+        -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+        "$PARENT_CTR_IMG" \
+        sh -c "
+            echo \"remote:unix:path=$CTR_RUN_DIR/p11kit.sock\" \
+                | sudo tee /etc/pkcs11/modules/vtok.module > /dev/null
+            echo \"module:$EVBIN_P11_MOD\" \
+                | sudo tee -a /etc/pkcs11/modules/vtok.module > /dev/null
+            PS1=\"[$USER@vtok-parent \\W] \" \
+                PATH=\"\$PATH:$CTR_BUILD_DIR/target/debug:$CTR_SRC_DIR/tools\" bash
+        "
+}
+
+main() {
+    local cmd="$1"
+
+    if [ -z "$cmd" ]; then
+        die "No command provided. Please use \`$0 help\` for help."
+    fi
+
+    declare -f "cmd_$1" > /dev/null
+    ok_or_die "Unknown command: $1. Please use \`$0 help\` for help."
+
+    local cmd_fn=cmd_$1
+    shift
+    $cmd_fn "$@"
+}
+
+main "${@}"

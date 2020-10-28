@@ -1,0 +1,16 @@
+[package]
+name = "vtok_srv"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Nitro vToken provisioning server"
+
+[dependencies]
+libc = "0.2"
+base64 = "0.12"
+vtok_common = { path = "../vtok_common" }
+vtok_rpc = { path = "../vtok_rpc" }
+
+[[bin]]
+name = "p11ne-server"
+path = "src/main.rs"

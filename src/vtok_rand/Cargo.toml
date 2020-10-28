@@ -1,0 +1,10 @@
+[package]
+name = "vtok_rand"
+version = "0.1.0"
+authors = ["Dan Horobeanu <dhr@amazon.com>"]
+edition = "2018"
+description = "Nitro vToken randomness seeder"
+
+[[bin]]
+name = "p11ne-rand"
+path = "src/main.rs"

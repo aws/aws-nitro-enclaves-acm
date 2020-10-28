@@ -1,0 +1,927 @@
+#!/usr/bin/env bash
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Test tool. Used for smoke-testing an p11ne enclave.
+# Right now user should copy the following on an EC2 instance
+# - the tests directory from the p11ne repo
+# - the testhelpers binary in the tests directory (pre-built in the p11ne repo)
+# /home/ec2-user/tests/testtool
+# /home/ec2-user/tests/testhelpers
+# ...
+#
+# With a role attached and a KMS key created beforehand run `./testtool openssl [...]`
+
+MY_NAME="testtool"
+
+# Test specific
+RESULT_DIR="tests/results"
+OVERALL_LOG_FILE="$RESULT_DIR/logs"
+HELPER_PATH="tests/testhelpers" # Same level as this script
+TEST_LARGE_FILE_SIZES="0 32 256 1024 4096 16000"
+TEST_SMALL_FILE_SIZES="1 2 4 8 16 32 64 128"
+TEST_ECDSA_FILE_SIZES="1 2 4 8 16 32 55"
+TEST_RSAPSS_SALT_SIZES="0 1 2 4 16 48 64"
+TEST_DIGESTS="sha1 sha224 sha256 sha384 sha512"
+
+# Test specifics
+PIN="1234"
+KEYID="%01"
+TOKEN_LABEL="test-token"
+URI_TOKEN="pkcs11:model=p11ne-token;manufacturer=Amazon;serial=EVT00;token=$TOKEN_LABEL;pin-value=$PIN;id=$KEYID"
+KEYS_DIR="./tests/keys/"
+KEY_DB_DIR="tests/db"
+RSA_KEYS="rsa1024 rsa2048 rsa4096"
+ECDSA_KEYS="secp384r1 secp521r1 prime256v1"
+
+# Exit codes
+EXIT_CODE_INVALID_PARAMS=1
+EXIT_CODE_FAILED_TESTS=2
+
+USAGE="\
+testtool
+
+Test sets:
+    openssl         	This test set uses openssl for performing the operations with the PKCS library.
+                        It provisions internally beforehand.
+        --kms-key-id  	User KMS CMK for encrypting the provisioned content.
+        --kms-region   	User IMDS region.
+"
+
+# Option to skip regeneration of file
+prng_seed="none"
+
+# Test results
+num_tests_passed=0
+num_tests_failed=0
+
+
+create_test_random_file() {
+    local outputfile="$1"
+    local size="$2"
+    $HELPER_PATH prng_file "$outputfile" "$size" "$prng_seed"
+
+    return $?
+}
+
+create_test_random_file_rsax509() {
+    local outputfile="$1"
+    local size="$2"
+    local tmpfile="$(mktemp -d)/input"
+    # We need to make sure that the first bit from the file is 0 so
+    # we use 0x41 as first byte
+    $HELPER_PATH prng_file "$tmpfile" "$((size-1))" "$prng_seed" &&
+    cat <(echo -n 'A') "$tmpfile" >$outputfile
+
+    return $?
+}
+
+bitflip() {
+    local inputfile="$1"
+    local outputfile="$2"
+    local start="$3"
+    local end="$4"
+
+    cp "$inputfile" "$outputfile" &&
+    local bit=$($HELPER_PATH prng_int "$prng_seed" "$start" "$end") &&
+    echo "Flipping bit $bit" &&
+    $HELPER_PATH bitflip "$outputfile" "$bit"
+}
+
+create_test_dir() {
+    local dirname="$1"
+    local dirpath="$2"
+    local dir="$RESULT_DIR/$dirpath/$dirname"
+    mkdir -p "$dir" >&2
+    echo "$dir"
+}
+
+get_size_humanreadable() {
+    local filesize="$1"
+    numfmt --to=iec-i --suffix=B --format="%1f" "$filesize"
+}
+
+get_key_file() {
+    local keylabel="$1"
+    local keytype="$2" # public/private
+    echo "$KEYS_DIR/${keylabel}_${keytype}key.pem"
+}
+
+get_key_pkcs_uri() {
+    local keylabel="$1"
+    local keytype="$2" # public/private
+    echo "${URI_TOKEN};object=${keylabel};type=${keytype}"
+}
+
+log_test_result() {
+    local testname="$1"
+    local test_exitcode="$2"
+
+    if [ $test_exitcode -eq 0 ]; then
+        num_tests_passed=$(($num_tests_passed+1))
+        result="\e[32;1mPASSED\e[0m"
+    else
+        num_tests_failed=$(($num_tests_failed+1))
+        result="\e[31;1mFAILED\e[0m"
+    fi
+
+    # 70 chars should be enough in order to have allways less than 80 chars
+    # after appending exit code(SUCESS/FAIL)
+    PAD_SIZE=70
+
+    len_testname=$(echo "$testname" | wc -c)
+    echo -n "$testname "
+    if [ $len_testname -le $PAD_SIZE ] ; then
+        len_pad=$(($PAD_SIZE - $len_testname))
+        printf "% ${len_pad}s" " " | sed 's/ /./g'
+    fi
+    echo -e " $result"
+}
+
+test_results_summary() {
+    printf "\n%d tests passed, %d tests failed\n" $num_tests_passed $num_tests_failed
+}
+
+# Sign RSA Helpers
+
+openssl_ref_digestsign_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+    local digest="$4"
+
+    openssl dgst "-$digest" \
+        -sign "$(get_key_file $keylabel private)" \
+        -out "$outsign" "$input"
+
+    return $?
+}
+
+openssl_ref_digestverify_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+    local digest="$4"
+
+    openssl dgst "-$digest" \
+        -verify "$(get_key_file $keylabel public)" \
+        -signature "$sign" "$input" $options
+
+    return $?
+}
+
+openssl_pkcs_digestsign_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+    local digest="$4"
+
+    openssl dgst "-$digest" -keyform engine -engine pkcs11 \
+        -sign "$(get_key_pkcs_uri $keylabel private)" \
+        -out "$outsign" "$input"
+
+    return $?
+}
+
+openssl_pkcs_digestverify_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+    local digest="$4"
+
+    openssl dgst "-$digest" -keyform engine -engine pkcs11 \
+        -verify "$(get_key_pkcs_uri $keylabel public)" \
+        -signature "$sign" "$input"
+
+    return $?
+}
+
+# Sign RSA X509 Helpers
+
+openssl_ref_sign_rsa_x509() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+
+    openssl rsautl \
+        -sign -inkey "$(get_key_file $keylabel private)" \
+        -out "$outsign" -in "$input" -raw
+
+    return $?
+}
+
+openssl_ref_verify_rsa_x509() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+    local outverify="$sign.refverify"
+
+    openssl rsautl \
+        -verify -inkey "$(get_key_file $keylabel public)" \
+        -in "$sign" -out "$outverify" -pubin -raw &&
+    diff "$input" "$outverify"
+
+    return $?
+}
+
+openssl_pkcs_sign_rsa_x509() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+
+    openssl rsautl -keyform engine -engine pkcs11 \
+        -sign -inkey "$(get_key_pkcs_uri $keylabel private)" \
+        -out "$outsign" -in "$input" -raw
+
+    return $?
+}
+
+openssl_pkcs_verify_rsa_x509() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+    local outverify="$sign.pkcsverify"
+
+    openssl rsautl -keyform engine -engine pkcs11 \
+        -verify -inkey "$(get_key_pkcs_uri $keylabel public)" \
+        -in "$sign" -out "$outverify" -pubin -raw &&
+    diff "$input" "$outverify"
+
+    return $?
+}
+
+# Sign RSA-PSS Helpers
+
+openssl_ref_digestsign_rsapss() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+    local saltlen="$4"
+    local digest="$5"
+
+    openssl dgst "-$digest" \
+        -sign "$(get_key_file $keylabel private)" \
+        -sigopt rsa_padding_mode:pss \
+        -sigopt "rsa_pss_saltlen:$saltlen" \
+        -sigopt "digest:$digest" \
+        -out "$outsign" "$input"
+
+    return $?
+}
+
+openssl_ref_digestverify_rsapss() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+    local saltlen="$4"
+    local digest="$5"
+
+    openssl dgst "-$digest" \
+        -verify "$(get_key_file $keylabel public)" \
+        -sigopt rsa_padding_mode:pss \
+        -sigopt "rsa_pss_saltlen:$saltlen" \
+        -sigopt "digest:$digest" \
+        -signature "$sign" "$input"
+
+    return $?
+}
+
+openssl_pkcs_digestsign_rsapss() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+    local saltlen="$4"
+    local digest="$5"
+
+    openssl dgst "-$digest" -keyform engine -engine pkcs11 \
+        -sign "$(get_key_pkcs_uri $keylabel private)" \
+        -sigopt rsa_padding_mode:pss \
+        -sigopt "rsa_pss_saltlen:$saltlen" \
+        -sigopt "digest:$digest" \
+        -out "$outsign" "$input"
+
+    return $?
+}
+
+openssl_pkcs_digestverify_rsapss() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+    local saltlen="$4"
+    local digest="$5"
+
+    openssl dgst "-$digest" -keyform engine -engine pkcs11 \
+        -verify "$(get_key_pkcs_uri $keylabel public)" \
+        -sigopt rsa_padding_mode:pss \
+        -sigopt "rsa_pss_saltlen:$saltlen" \
+        -sigopt "digest:$digest" \
+        -signature "$sign" "$input"
+
+    return $?
+}
+
+# Sign&Verify ECDSA Helpers
+
+openssl_pkcs_sign_ecdsa() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+
+    openssl dgst \
+        -keyform engine -engine pkcs11 \
+        -sign "$(get_key_pkcs_uri $keylabel private)" \
+        -out "$outsign" "$input"
+
+    return $?
+}
+
+openssl_pkcs_verify_ecdsa() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+
+    openssl dgst \
+        -keyform engine -engine pkcs11 \
+        -verify "$(get_key_pkcs_uri $keylabel public)" \
+        -signature "$sign" "$input"
+
+    return $?
+}
+
+openssl_ref_sign_ecdsa() {
+    local keylabel="$1"
+    local input="$2"
+    local outsign="$3"
+
+    openssl dgst -sign \
+         "$(get_key_file $keylabel private)" \
+	"$input" > "$outsign"
+
+    return $?
+}
+
+openssl_ref_verify_ecdsa() {
+    local keylabel="$1"
+    local input="$2"
+    local sign="$3"
+
+    openssl dgst \
+        -verify "$(get_key_file $keylabel public)" \
+        -signature "$sign" "$input"
+
+    return $?
+}
+
+# Encrypt/Decrypt RSA Helpers
+
+openssl_pkcs_encrypt_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local outenc="$3"
+
+    openssl pkeyutl -encrypt \
+        -keyform engine -engine pkcs11 \
+        -pubin -inkey "$(get_key_pkcs_uri $keylabel public)" \
+        -out "$outenc" \
+        -in "$input"
+
+    return $?
+}
+
+openssl_pkcs_decrypt_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local enc="$3"
+    local outdec="$enc.pkcsdecrypted"
+
+    openssl pkeyutl -decrypt \
+        -keyform engine -engine pkcs11 \
+        -inkey "$(get_key_pkcs_uri $keylabel private)" \
+        -out "$outdec" \
+        -in "$enc" &&
+    diff "$input" "$outdec"
+
+    return $?
+}
+
+openssl_ref_encrypt_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local outenc="$3"
+
+    openssl pkeyutl -encrypt \
+        -pubin -inkey "$(get_key_file $keylabel public)" \
+        -out "$outenc" \
+        -in "$input"
+
+    return $?
+}
+
+openssl_ref_decrypt_rsa() {
+    local keylabel="$1"
+    local input="$2"
+    local enc="$3"
+    local outdec="$enc.refdecrypted"
+
+    openssl pkeyutl -decrypt \
+        -inkey "$(get_key_file $keylabel private)" \
+        -out "$outdec" \
+        -in "$enc" &&
+    diff "$input" "$outdec"
+
+    return $?
+}
+
+# Encrypt/Decrypt x509
+
+openssl_pkcs_encrypt_rsax509() {
+    local keylabel="$1"
+    local input="$2"
+    local outenc="$3"
+
+    openssl pkeyutl -encrypt \
+        -keyform engine -engine pkcs11 \
+        -pubin -inkey "$(get_key_pkcs_uri $keylabel public)" \
+        -out "$outenc" \
+        -in "$input" \
+        -pkeyopt rsa_padding_mode:none
+
+    return $?
+}
+
+openssl_pkcs_decrypt_rsax509() {
+    local keylabel="$1"
+    local input="$2"
+    local enc="$3"
+    local outdec="$sign.pkcsdecrypted"
+
+    openssl pkeyutl -decrypt \
+        -keyform engine -engine pkcs11 \
+        -inkey "$(get_key_pkcs_uri $keylabel private)" \
+        -out "$outdec" \
+        -in "$enc" \
+        -pkeyopt rsa_padding_mode:none &&
+    diff "$input" "$outdec"
+
+    return $?
+}
+
+openssl_ref_encrypt_rsax509() {
+    local keylabel="$1"
+    local input="$2"
+    local outenc="$3"
+
+    openssl pkeyutl -encrypt \
+        -pubin -inkey "$(get_key_file $keylabel public)" \
+        -out "$outenc" \
+        -in "$input" \
+        -pkeyopt rsa_padding_mode:none
+
+    return $?
+}
+
+openssl_ref_decrypt_rsax509() {
+    local keylabel="$1"
+    local input="$2"
+    local enc="$3"
+    local outdec="$sign.refdecrypted"
+
+    openssl pkeyutl -decrypt \
+        -inkey "$(get_key_file $keylabel private)" \
+        -out "$outdec" \
+        -in "$enc" \
+        -pkeyopt rsa_padding_mode:none &&
+    diff "$input" "$outdec"
+
+    return $?
+}
+
+# Tests
+
+generate_test_name() {
+    local IFS="_"
+    echo "$*"
+}
+
+testtemplate_generate_check() {
+    local fullargs="$@"
+    # Test basename & family
+    local test_basename="$1"
+    local test_family="$2"
+    # Function ptrs
+    local fct_generator_pkcs="$3"
+    local fct_generator_ref="$4"
+    local fct_checker_pkcs="$5"
+    local fct_checker_ref="$6"
+    local fct_custom_check_out_files="$7"
+    local fct_prng_inputfile="$8"
+    # File size
+    local filesize="$9"
+    local keylabel="${10}"
+    shift 10
+    # Test specific arguments
+    local testargs="$@"
+
+    local filesize_humanreadable=$(get_size_humanreadable $filesize)
+    local testname=$(generate_test_name $test_basename $keylabel $filesize_humanreadable $testargs)
+    local test_dir=$(create_test_dir $testname $test_family)
+    local inputpath="$test_dir/input"
+    local corruptedinputpath="$test_dir/input_corrupted"
+    local logfile="$test_dir/logs"
+    local pkcs_out_path="$test_dir/input.pkcsout"
+    local ref_out_path="$test_dir/input.refout"
+
+    {
+        echo "Running test ${FUNCNAME[0]} $fullargs"
+
+        echo "Creating input file with size $filesize, path $inputpath" &&
+        $fct_prng_inputfile "$inputpath" "$filesize" &&
+
+        if [ "$filesize" -gt 0 ] ; then
+            echo "Corrupting input file" &&
+            bitflip "$inputpath" "$corruptedinputpath" 0 $((8* $filesize)) &&
+            (! diff "$inputpath" "$corruptedinputpath")
+        fi &&
+
+        echo "PKCS library - generate" &&
+        $fct_generator_pkcs  "$keylabel" "$inputpath" "$pkcs_out_path" $testargs &&
+
+        echo "Reference - generate" &&
+        $fct_generator_ref "$keylabel" "$inputpath" "$ref_out_path" $testargs &&
+
+        echo "Custom check pkcs output file against reference output file" &&
+        $fct_custom_check_out_files "$pkcs_out_path" "$ref_out_path" $testargs &&
+
+        echo "Reference check of pkcs output" &&
+        $fct_checker_ref "$keylabel" "$inputpath" "$pkcs_out_path" $testargs &&
+
+        echo "PKCS check of reference output" &&
+        $fct_checker_pkcs "$keylabel" "$inputpath" "$ref_out_path" $testargs &&
+
+        if [ "$filesize" -gt 0 ] ; then
+            echo "Checking that the PKCS output can not be checked" \
+                "against corrupted input by reference checker" &&
+            (! $fct_checker_ref "$keylabel" "$corruptedinputpath" "$pkcs_out_path" $testargs) &&
+
+            echo "Checking that the reference output can not be checked" \
+                "against corrupted input using pkcs11 module" &&
+            (! $fct_checker_pkcs "$keylabel" "$corruptedinputpath" "$ref_out_path" $testargs)
+        fi
+
+    } >$logfile 2>&1
+    exitcode=$?
+
+    echo $testname
+    log_test_result "$testname" "$exitcode"
+}
+
+check_outfiles_diff() {
+    local pkcs_out="$1"
+    local ref_out="$2"
+
+    diff "$pkcs_out" "$ref_out"
+
+    return $?
+}
+
+test_openssl_digestsignverify_rsa() {
+    local filesize="$1"
+    local keylabel="$2"
+    local digest="$3"
+
+    testtemplate_generate_check \
+        "${FUNCNAME[0]}" \
+        "signverify/rsa_pkcs/${keylabel}" \
+        openssl_pkcs_digestsign_rsa openssl_ref_digestsign_rsa \
+        openssl_pkcs_digestverify_rsa openssl_ref_digestverify_rsa \
+        check_outfiles_diff \
+        create_test_random_file \
+        "$filesize" "$keylabel" \
+        "$digest"
+}
+
+test_openssl_signverify_rsa_x509() {
+    local filesize="$1"
+    local keylabel="$2"
+
+    testtemplate_generate_check \
+        "${FUNCNAME[0]}" \
+        "signverify/rsa_x509/${keylabel}" \
+        openssl_pkcs_sign_rsa_x509 openssl_ref_sign_rsa_x509 \
+        openssl_pkcs_verify_rsa_x509 openssl_ref_verify_rsa_x509 \
+        check_outfiles_diff \
+        create_test_random_file_rsax509 \
+        "$filesize" "$keylabel"
+}
+
+check_outfiles_signverify_rsapss() {
+    local pkcs_out="$1"
+    local ref_out="$2"
+    local saltlen="$3"
+
+    if [ "$saltlen" -eq 0 ] ; then
+        echo "Checking that the resulting files are identical as no salt is used" &&
+        diff "$pkcs_out" "$pkcs_out"
+    else
+        echo "Skiping indentical files check as salt is used"
+    fi
+
+    return $?
+}
+
+test_openssl_digestsignverify_rsapss() {
+    local filesize="$1"
+    local keylabel="$2"
+    local saltlen="$3"
+    local digest="$4"
+
+    # Skip RSA-1024 PSS with SHA2-512 since padding yields invalid input sizes
+    if [ $keylabel == "rsa1024" ] && [ $saltlen == 64 ] ; then
+        return;
+    fi
+
+    testtemplate_generate_check \
+        "${FUNCNAME[0]}" \
+        "signverify/rsapss/${keylabel}" \
+        openssl_pkcs_digestsign_rsapss openssl_ref_digestsign_rsapss \
+        openssl_pkcs_digestverify_rsapss openssl_ref_digestverify_rsapss \
+        check_outfiles_signverify_rsapss \
+        create_test_random_file \
+        "$filesize" "$keylabel" \
+        "$saltlen" "$digest"
+}
+
+test_openssl_signverify_ecdsa() {
+    local filesize="$1"
+    local keylabel="$2"
+
+    testtemplate_generate_check \
+        "${FUNCNAME[0]}" \
+        "signverify/ecdsa/${keylabel}" \
+       openssl_pkcs_sign_ecdsa openssl_ref_sign_ecdsa \
+       openssl_pkcs_verify_ecdsa openssl_ref_verify_ecdsa \
+        true \
+        create_test_random_file \
+        "$filesize" "$keylabel"
+}
+
+test_openssl_encryptdecrypt_rsa() {
+    local filesize="$1"
+    local keylabel="$2"
+    local saltlen="$3"
+    local digest="$4"
+
+    # Skip RSA-1024 with 128 bytes since key is to small for this size
+    if [ $keylabel == "rsa1024" ] && [ $filesize == 128 ] ; then
+        return;
+    fi
+
+    testtemplate_generate_check \ "${FUNCNAME[0]}" \
+        "encryptdecrypt/rsa_pkcs/${keylabel}" \
+        openssl_pkcs_encrypt_rsa openssl_ref_encrypt_rsa \
+        openssl_pkcs_decrypt_rsa openssl_ref_decrypt_rsa \
+        true \
+        create_test_random_file \
+        "$filesize" "$keylabel"
+}
+
+test_openssl_encryptdecrypt_rsa_x509() {
+    local filesize="$1"
+    local keylabel="$2"
+    local saltlen="$3"
+    local digest="$4"
+
+    testtemplate_generate_check \
+        "${FUNCNAME[0]}" \
+        "encryptdecrypt/rsa_x509/${keylabel}" \
+        openssl_pkcs_encrypt_rsax509 openssl_ref_encrypt_rsax509 \
+        openssl_pkcs_decrypt_rsax509 openssl_ref_decrypt_rsax509 \
+        check_outfiles_diff \
+        create_test_random_file_rsax509 \
+        "$filesize" "$keylabel"
+}
+
+# Prepare test environment
+prepare_test_env() {
+
+    # TODO: Create role, attach it, create kms key
+
+    mkdir -p "$KEY_DB_DIR"
+    ok_or_die "Cannot create test key database directory."
+
+    # Initialize the p11ne enclave
+    p11ne-cli start > /dev/null 2>&1
+    if [ $? -ne 0 ] ; then
+    # In case previous test was interrupted. Restart the enclave now.
+        p11ne-cli stop
+        ok_or_die "Cannot stop the p11ne enclave"
+
+        p11ne-cli start
+        ok_or_die "Cannot start the p11ne enclave"
+    fi
+}
+
+# Cleanup test environment
+cleanup_test_env() {
+
+    p11ne-cli stop > /dev/null 2>&1
+
+    rm -rf "$KEY_DB_DIR"
+
+    # TODO: Destroy kms key, detach role, destroy role
+}
+
+# Provision test token with test key
+provision_key() {
+    if [ "$#" -ne 6 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --kms-key-id) key_id="$2"; shift ;;
+            --kms-region) region="$2"; shift ;;
+            --key-label) keylabel="$2"; shift;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+    # Initialize a token with one key type
+    p11ne-db pack-key --id 1 --label testkey --key-file "$(get_key_file "$keylabel" private)" --out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
+    ok_or_die "Cannot pack p11ne token test key."
+
+    p11ne-cli init-token --key-db "$KEY_DB_DIR/$keylabel.db" --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+
+    return 0
+}
+
+# Release test token
+cleanup_key() {
+    if [ "$#" -ne 2 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --key-label) keylabel="$2"; shift;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+    p11ne-cli release-token --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+}
+
+# Openssl
+
+cmd_openssl() {
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --kms-key-id) key_id="$2"; shift ;;
+            --kms-region) region="$2"; shift ;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+    prepare_test_env
+
+    for rsa_key in $RSA_KEYS ; do
+        provision_key --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
+        ok_or_die "Cannot provision openssl test keys."
+
+    	echo "Running Sign&verify tests"
+    	echo "Running RSA-PSS Sign&Verify tests using openssl"
+
+       	for fsize in $TEST_LARGE_FILE_SIZES ; do
+            for digest in $TEST_DIGESTS ; do
+                for slen in $TEST_RSAPSS_SALT_SIZES ; do
+                    test_openssl_digestsignverify_rsapss $fsize $rsa_key $slen $digest
+                done
+            done
+        done
+
+        echo "Running RSA Sign&Verify tests using openssl"
+        for fsize in $TEST_LARGE_FILE_SIZES ; do
+            for digest in $TEST_DIGESTS ; do
+                test_openssl_digestsignverify_rsa $fsize $rsa_key $digest
+            done
+        done
+
+        echo "Running RSA RAW Sign&Verify (x509) tests using openssl"
+        # For raw rsa signature the length of the input file must be equal to
+        # the length of the key
+        if [ "$rsa_key" == "rsa1024" ] ; then
+            test_openssl_signverify_rsa_x509 128 "rsa1024"
+        elif [ "$rsa_key" == "rsa2048" ] ; then
+            test_openssl_signverify_rsa_x509 256 "rsa2048"
+        elif [ "$rsa_key" == "rsa4096" ] ; then
+            test_openssl_signverify_rsa_x509 512 "rsa4096"
+        fi
+
+        cleanup_key --key-label "$rsa_key"
+    done
+
+    echo "Running ECDSA Sign&Verify tests using openssl"
+    for ec_key in $ECDSA_KEYS ; do
+        provision_key --kms-key-id "$key_id" --kms-region "$region" --key-label "$ec_key"
+
+        for fsize in $TEST_ECDSA_FILE_SIZES ; do
+            test_openssl_signverify_ecdsa $fsize $ec_key
+        done
+
+        cleanup_key --key-label "$ec_key"
+    done
+
+    echo "Running Encrypt&Decrypt tests"
+    for rsa_key in $RSA_KEYS ; do
+        provision_key --kms-key-id "$key_id" --kms-region "$region" --key-label "$rsa_key"
+
+        for fsize in $TEST_SMALL_FILE_SIZES ; do
+            test_openssl_encryptdecrypt_rsa $fsize $rsa_key
+        done
+
+        echo "Running RSA RAW Encrypt&Decrypt (x509) tests using openssl"
+
+	if [ "$rsa_key" == "rsa1024" ] ; then
+        test_openssl_encryptdecrypt_rsa_x509 128 "rsa1024"
+	elif [ "$rsa_key" == "rsa2048" ] ; then
+        test_openssl_encryptdecrypt_rsa_x509 256 "rsa2048"
+	elif [ "$rsa_key" == "rsa4096" ] ; then
+        test_openssl_encryptdecrypt_rsa_x509 512 "rsa4096"
+	fi
+
+        cleanup_key --key-label "$rsa_key"
+    done
+
+    cleanup_test_env
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+#
+die() {
+    code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit "$code"
+}
+
+# Exit with an error message if the last exit code is not 0
+#
+ok_or_die() {
+    code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Send a text message to stderr
+#
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+cmd_help() {
+    echo "$USAGE"
+}
+
+# Main
+main() {
+    if [ "$#" -eq 0 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    local cmd="$1"
+
+    declare -f "cmd_$cmd" > /dev/null
+    ok_or_die "Unknown command: $1. Please use \`$0 help\` for help."
+
+    # Change working directory to Encryption Vault root
+    cd "$(dirname "$0")/.."
+    ok_or_die "Cannot change working directory"
+
+    mkdir -p "$RESULT_DIR"
+
+    {
+        prng_seed=$RANDOM
+
+        # Run test case
+        cmd_"$@"
+
+        # Print test case summary
+        if [ "$*" != "help" ] ; then
+            test_results_summary
+            if [ "$num_tests_failed" -ne 0 ] ; then
+                exit $EXIT_CODE_FAILED_TESTS
+            fi
+        fi
+    } | tee $OVERALL_LOG_FILE
+}
+
+main "${@}"
