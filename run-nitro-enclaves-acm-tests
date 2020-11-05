@@ -1,0 +1,58 @@
+#!/bin/bash
+
+ERR_MISSING_BIN=1
+ERR_MISSING_FILE=2
+
+ERR_CODE=0
+
+# Binaries which should exist under $PATH after package installation
+acm_ne_bins_array=("nitro-cli" \
+		   "vsock-proxy" \
+		   "p11ne-agent" \
+		   "p11ne-client" \
+		  )
+
+# Files brought in by the RPM(s), specified by full path
+acm_ne_files_array=("/lib/systemd/system/nitro-enclaves-allocator.service" \
+		    "/lib/systemd/system/nitro-enclaves-vsock-proxy.service" \
+		    "/lib/systemd/system/nitro-enclaves-acm.service" \
+		    "/usr/share/nitro_enclaves/p11ne/p11ne.eif" \
+		    "/usr/share/nitro_enclaves/p11ne/image-measurements.json" \
+		    "/usr/share/nitro_enclaves/p11ne/acm.example.yaml" \
+		   )
+
+
+function test_acm_ne_bins() {
+	echo -n "Checking that ACM NE binaries are installed .........."
+
+	for binary in "${acm_ne_bins_array[@]}"; do
+		local ret=$(which "$binary" 2>&1)
+		echo $ret | grep "no $binary in" > /dev/null 2>&1 && echo " [FAIL]" && ERR_CODE=$ERR_MISSING_BIN && return
+	done
+
+	echo "[PASS]"
+}
+
+function test_acm_ne_files() {
+	echo -n "Checking that ACM NE files are installed .........."
+
+	for file in "${acm_ne_files_array[@]}"; do
+		if [ ! -f "$file" ]; then
+			echo " [FAIL]" && ERR_CODE=$ERR_MISSING_FILE && return
+		fi
+	done
+
+	echo "[PASS]"
+}
+
+function run_test() {
+	test_acm_ne_bins
+	test_acm_ne_files
+}
+
+
+run_test
+
+if [ $ERR_CODE -ne 0 ]; then
+	echo "Tests exit code: $ERR_CODE" && exit $ERR_CODE
+fi
