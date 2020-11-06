@@ -204,7 +204,7 @@ impl ManagedToken {
         let db_changed = self.db.update()?;
         let is_online = self
             .enclave
-            .rpc(schema::ApiRequest::DescribeToken {
+            .rpc(&schema::ApiRequest::DescribeToken {
                 label: self.label.clone(),
                 pin: self.pin.clone(),
             })
@@ -220,7 +220,7 @@ impl ManagedToken {
 
                 debug!("Updating token {}", self.label.as_str());
                 self.enclave
-                    .rpc(schema::ApiRequest::UpdateToken {
+                    .rpc(&schema::ApiRequest::UpdateToken {
                         label: self.label.clone(),
                         pin: self.pin.clone(),
                         token: self.to_schema_token()?,
@@ -244,7 +244,7 @@ impl ManagedToken {
                     self.label.as_str()
                 );
                 self.enclave
-                    .rpc(schema::ApiRequest::UpdateToken {
+                    .rpc(&schema::ApiRequest::UpdateToken {
                         label: self.label.clone(),
                         pin: self.pin.clone(),
                         token: self.to_schema_token()?,
@@ -257,7 +257,7 @@ impl ManagedToken {
                 if self.next_refresh <= Instant::now() {
                     info!("Refreshing token {}", self.label.as_str());
                     self.enclave
-                        .rpc(schema::ApiRequest::RefreshToken {
+                        .rpc(&schema::ApiRequest::RefreshToken {
                             label: self.label.clone(),
                             pin: self.pin.clone(),
                             envelope_key: Self::kms_envelope_key()?,
@@ -275,7 +275,7 @@ impl ManagedToken {
             (false, _, _) => {
                 debug!("Adding token {}", self.label.as_str());
                 self.enclave
-                    .rpc(schema::ApiRequest::AddToken {
+                    .rpc(&schema::ApiRequest::AddToken {
                         token: self.to_schema_token()?,
                     })
                     .map_err(Error::EnclaveError)?

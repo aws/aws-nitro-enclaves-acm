@@ -125,7 +125,7 @@ fn cmd_raw_rpc<I: Iterator<Item = String>>(mut arg_iter: I) -> Result<(), Error>
         let request = serde_json::from_reader(std::io::stdin())
             .map_err(|_| Error::UsageError(format!("Invalid RPC request")))?;
         transport
-            .send_request(request)
+            .send_request(&request)
             .map_err(Error::TransportError)?;
         let response = transport.recv_response().map_err(Error::TransportError)?;
 
