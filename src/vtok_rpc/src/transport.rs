@@ -23,11 +23,11 @@ pub trait Transport {
     /// Receive an RPC request.
     fn recv_request(&mut self) -> Result<ApiRequest>;
     /// Send an RPC request.
-    fn send_request(&mut self, req: ApiRequest) -> Result<()>;
+    fn send_request(&mut self, req: &ApiRequest) -> Result<()>;
     /// Receive an RPC response.
     fn recv_response(&mut self) -> Result<ApiResponse>;
     /// Send an RPC response.
-    fn send_response(&mut self, resp: ApiResponse) -> Result<()>;
+    fn send_response(&mut self, resp: &ApiResponse) -> Result<()>;
 }
 
 /// RPC transport implementation via a super-simple subset of HTTP.
@@ -160,7 +160,7 @@ impl<S: Read + Write> Transport for HttpTransport<S> {
         })
     }
 
-    fn send_request(&mut self, request: ApiRequest) -> Result<()> {
+    fn send_request(&mut self, request: &ApiRequest) -> Result<()> {
         let body = serde_json::to_vec(&request).map_err(Error::SerdeError)?;
         self.stream
             .write(
@@ -198,7 +198,7 @@ impl<S: Read + Write> Transport for HttpTransport<S> {
         })
     }
 
-    fn send_response(&mut self, response: ApiResponse) -> Result<()> {
+    fn send_response(&mut self, response: &ApiResponse) -> Result<()> {
         let body = serde_json::to_vec(&response).map_err(Error::SerdeError)?;
         self.stream
             .write(

@@ -100,7 +100,7 @@ impl P11neEnclave {
         let mut left = Some(self.boot_timeout);
         let poll_us = 100_000_u32;
         while left.is_some() {
-            if let Ok(Ok(_)) = self.rpc(schema::ApiRequest::DescribeDevice) {
+            if let Ok(Ok(_)) = self.rpc(&schema::ApiRequest::DescribeDevice) {
                 return true;
             }
             unsafe {
@@ -118,7 +118,7 @@ impl P11neEnclave {
         self.pid
     }
 
-    pub fn rpc(&self, request: schema::ApiRequest) -> Result<schema::ApiResponse, Error> {
+    pub fn rpc(&self, request: &schema::ApiRequest) -> Result<schema::ApiResponse, Error> {
         VsockStream::connect(VsockAddr {
             cid: self.cid,
             port: self.rpc_port,

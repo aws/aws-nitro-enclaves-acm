@@ -51,7 +51,7 @@ where
             });
 
         self.transport
-            .send_response(response)
+            .send_response(&response)
             .map_err(Error::TransportError)
     }
 

@@ -124,7 +124,7 @@ impl Agent {
                     );
                     broken_list.push(tok.label.clone());
                     self.enclave
-                        .rpc(schema::ApiRequest::RemoveToken {
+                        .rpc(&schema::ApiRequest::RemoveToken {
                             label: tok.label.clone(),
                             pin: tok.pin.clone(),
                         })
