@@ -37,6 +37,7 @@ pub mod defs {
     pub const DEFAULT_LOG_LEVEL: log::Level = log::Level::Info;
     pub const DEFAULT_LOG_TIMESTAMP: bool = false;
     pub const DEFAULT_ACM_BUCKET: &str = "prod";
+    pub const DEFAULT_ATTESTATION_RETRY_COUNT: usize = 5;
 }
 
 pub mod gdata {

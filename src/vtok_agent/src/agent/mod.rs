@@ -14,6 +14,7 @@ use nix::{sys::signal, unistd};
 use crate::config;
 use crate::gdata;
 use crate::imds;
+use crate::util;
 use crate::{enclave, enclave::P11neEnclave};
 use mngtok::ManagedToken;
 use vtok_rpc::api::schema;
@@ -87,10 +88,8 @@ impl Agent {
                 next_sync += sync_interval;
             }
 
-            unistd::sleep(1);
-
+            util::interruptible_sleep(Duration::from_secs(1)).unwrap_or_default();
             if gdata::EXIT_CONDITION.load(Ordering::SeqCst) {
-                info!("Shutting down");
                 return Ok(());
             }
         }
@@ -124,10 +123,7 @@ impl Agent {
                     );
                     broken_list.push(tok.label.clone());
                     self.enclave
-                        .rpc(&schema::ApiRequest::RemoveToken {
-                            label: tok.label.clone(),
-                            pin: tok.pin.clone(),
-                        })
+                        .remove_token(tok.label.clone(), tok.pin.clone())
                         .map_err(Error::EnclaveError)?
                         .map_err(Error::RemoveTokenError)?;
                 }

@@ -1,18 +1,16 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 use log::{info, warn};
-use nix::libc;
 use nix::sys::signal;
 use nix::unistd;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::process::Command;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::defs;
 use super::ne;
-use crate::{config, gdata};
+use crate::{config, util};
 use vtok_rpc::api::schema;
 use vtok_rpc::{HttpTransport, Transport, VsockAddr, VsockStream};
 
@@ -31,6 +29,7 @@ pub struct P11neEnclave {
     pid: i32,
     boot_timeout: std::time::Duration,
     rpc_port: u32,
+    attestation_retry_count: usize,
 }
 
 impl P11neEnclave {
@@ -93,23 +92,22 @@ impl P11neEnclave {
                     .unwrap_or(defs::DEFAULT_ENCLAVE_BOOT_TIMEOUT_MS),
             ),
             rpc_port: enclave_config.rpc_port.unwrap_or(defs::DEFAULT_RPC_PORT),
+            attestation_retry_count: enclave_config
+                .attestation_retry_count
+                .unwrap_or(defs::DEFAULT_ATTESTATION_RETRY_COUNT),
         })
     }
 
     pub fn wait_boot(&self) -> bool {
-        let mut left = Some(self.boot_timeout);
-        let poll_us = 100_000_u32;
-        while left.is_some() {
+        let limit = Instant::now() + self.boot_timeout;
+        let poll_dur = Duration::from_millis(100);
+        while Instant::now() < limit {
             if let Ok(Ok(_)) = self.rpc(&schema::ApiRequest::DescribeDevice) {
                 return true;
             }
-            unsafe {
-                libc::usleep(poll_us);
-            }
-            if gdata::EXIT_CONDITION.load(Ordering::SeqCst) {
+            if let Err(util::SleepError::UserExit) = util::interruptible_sleep(poll_dur) {
                 return false;
             }
-            left = left.and_then(|x| x.checked_sub(Duration::from_micros(u64::from(poll_us))));
         }
         false
     }
@@ -118,7 +116,62 @@ impl P11neEnclave {
         self.pid
     }
 
-    pub fn rpc(&self, request: &schema::ApiRequest) -> Result<schema::ApiResponse, Error> {
+    pub fn add_token(&self, token: schema::Token) -> Result<schema::ApiResponse, Error> {
+        self.retry_rpc(&schema::ApiRequest::AddToken { token })
+    }
+
+    pub fn refresh_token(
+        &self,
+        label: String,
+        pin: String,
+        envelope_key: schema::EnvelopeKey,
+    ) -> Result<schema::ApiResponse, Error> {
+        self.retry_rpc(&schema::ApiRequest::RefreshToken {
+            label,
+            pin,
+            envelope_key,
+        })
+    }
+
+    pub fn remove_token(&self, label: String, pin: String) -> Result<schema::ApiResponse, Error> {
+        self.rpc(&schema::ApiRequest::RemoveToken { label, pin })
+    }
+
+    pub fn update_token(
+        &self,
+        label: String,
+        pin: String,
+        token: schema::Token,
+    ) -> Result<schema::ApiResponse, Error> {
+        self.retry_rpc(&schema::ApiRequest::UpdateToken { label, pin, token })
+    }
+
+    pub fn describe_token(&self, label: String, pin: String) -> Result<schema::ApiResponse, Error> {
+        self.rpc(&schema::ApiRequest::DescribeToken { label, pin })
+    }
+
+    fn retry_rpc(&self, request: &schema::ApiRequest) -> Result<schema::ApiResponse, Error> {
+        let mut count = 1;
+        loop {
+            // Transport errors are non-recoverable.
+            let res = self.rpc(request)?;
+            if res.is_ok() || count == self.attestation_retry_count {
+                return Ok(res);
+            }
+            let sleep = Duration::from_millis((1 << (count - 1)) * 100);
+            warn!(
+                "RPC error (will retry in {}ms): {:?}",
+                sleep.as_millis(),
+                res
+            );
+            if let Err(util::SleepError::UserExit) = util::interruptible_sleep(sleep) {
+                return Ok(res);
+            }
+            count += 1;
+        }
+    }
+
+    fn rpc(&self, request: &schema::ApiRequest) -> Result<schema::ApiResponse, Error> {
         VsockStream::connect(VsockAddr {
             cid: self.cid,
             port: self.rpc_port,
