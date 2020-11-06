@@ -14,6 +14,7 @@ use nix::unistd;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use super::PostSyncAction;
 use crate::imds;
 use crate::util;
 use crate::{config, defs, enclave, enclave::P11neEnclave};
@@ -199,7 +200,7 @@ impl ManagedToken {
         })
     }
 
-    pub fn sync(&mut self) -> Result<Option<super::PostSyncAction>, Error> {
+    pub fn sync(&mut self) -> Result<Option<PostSyncAction>, Error> {
         let db_changed = self.db.update()?;
         let is_online = self
             .enclave
@@ -252,7 +253,7 @@ impl ManagedToken {
                     .map_err(Error::UpdateTokenError)?;
                 Ok(None)
             }
-            (true, false, _) => {
+            (true, false, maybe_target) => {
                 if self.next_refresh <= Instant::now() {
                     info!("Refreshing token {}", self.label.as_str());
                     self.enclave
@@ -264,8 +265,12 @@ impl ManagedToken {
                         .map_err(Error::EnclaveError)?
                         .map_err(Error::RefreshTokenError)?;
                     self.next_refresh += self.refresh_interval;
+                    Ok(maybe_target.as_ref().map(|t| match t {
+                        config::Target::NginxStanza { .. } => PostSyncAction::ReloadNginx,
+                    }))
+                } else {
+                    Ok(None)
                 }
-                Ok(None)
             }
             (false, _, _) => {
                 debug!("Adding token {}", self.label.as_str());
@@ -287,7 +292,7 @@ impl ManagedToken {
         }
     }
 
-    fn satisfy_target(&self) -> Result<Option<super::PostSyncAction>, Error> {
+    fn satisfy_target(&self) -> Result<Option<PostSyncAction>, Error> {
         let (key_id, key_label) = self
             .db
             .to_schema_keys()
@@ -386,7 +391,7 @@ impl ManagedToken {
                         Ok(())
                     })?;
                 debug!("Done writing {}", &path);
-                Ok(Some(super::PostSyncAction::ReloadNginx))
+                Ok(Some(PostSyncAction::ReloadNginx))
             }
         }
     }
