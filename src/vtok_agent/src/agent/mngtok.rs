@@ -204,10 +204,7 @@ impl ManagedToken {
         let db_changed = self.db.update()?;
         let is_online = self
             .enclave
-            .rpc(&schema::ApiRequest::DescribeToken {
-                label: self.label.clone(),
-                pin: self.pin.clone(),
-            })
+            .describe_token(self.label.clone(), self.pin.clone())
             .map_err(Error::EnclaveError)?
             .is_ok();
 
@@ -220,11 +217,11 @@ impl ManagedToken {
 
                 debug!("Updating token {}", self.label.as_str());
                 self.enclave
-                    .rpc(&schema::ApiRequest::UpdateToken {
-                        label: self.label.clone(),
-                        pin: self.pin.clone(),
-                        token: self.to_schema_token()?,
-                    })
+                    .update_token(
+                        self.label.clone(),
+                        self.pin.clone(),
+                        self.to_schema_token()?,
+                    )
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::UpdateTokenError)?;
 
@@ -244,11 +241,11 @@ impl ManagedToken {
                     self.label.as_str()
                 );
                 self.enclave
-                    .rpc(&schema::ApiRequest::UpdateToken {
-                        label: self.label.clone(),
-                        pin: self.pin.clone(),
-                        token: self.to_schema_token()?,
-                    })
+                    .update_token(
+                        self.label.clone(),
+                        self.pin.clone(),
+                        self.to_schema_token()?,
+                    )
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::UpdateTokenError)?;
                 Ok(None)
@@ -257,11 +254,11 @@ impl ManagedToken {
                 if self.next_refresh <= Instant::now() {
                     info!("Refreshing token {}", self.label.as_str());
                     self.enclave
-                        .rpc(&schema::ApiRequest::RefreshToken {
-                            label: self.label.clone(),
-                            pin: self.pin.clone(),
-                            envelope_key: Self::kms_envelope_key()?,
-                        })
+                        .refresh_token(
+                            self.label.clone(),
+                            self.pin.clone(),
+                            Self::kms_envelope_key()?,
+                        )
                         .map_err(Error::EnclaveError)?
                         .map_err(Error::RefreshTokenError)?;
                     self.next_refresh += self.refresh_interval;
@@ -275,9 +272,7 @@ impl ManagedToken {
             (false, _, _) => {
                 debug!("Adding token {}", self.label.as_str());
                 self.enclave
-                    .rpc(&schema::ApiRequest::AddToken {
-                        token: self.to_schema_token()?,
-                    })
+                    .add_token(self.to_schema_token()?)
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::AddTokenError)?;
                 self.satisfy_target().or_else(|e| {

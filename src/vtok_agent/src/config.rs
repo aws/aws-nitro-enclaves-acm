@@ -48,6 +48,7 @@ pub struct Enclave {
     pub boot_timeout_ms: Option<u64>,
     pub p11kit_port: Option<u32>,
     pub rpc_port: Option<u32>,
+    pub attestation_retry_count: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -4,6 +4,32 @@ use std::fmt::Write;
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::path::Path;
+use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
+
+use crate::gdata;
+use nix::libc;
+
+pub enum SleepError {
+    UserExit,
+}
+
+pub fn interruptible_sleep(dur: Duration) -> Result<(), SleepError> {
+    let wake_time = Instant::now() + dur;
+    loop {
+        let left = match wake_time.checked_duration_since(Instant::now()) {
+            Some(dur) => libc::timespec {
+                tv_sec: dur.as_secs() as libc::time_t,
+                tv_nsec: dur.subsec_nanos() as libc::c_long,
+            },
+            None => return Ok(()),
+        };
+        unsafe { libc::nanosleep(&left, std::ptr::null_mut()) };
+        if gdata::EXIT_CONDITION.load(Ordering::SeqCst) {
+            return Err(SleepError::UserExit);
+        }
+    }
+}
 
 pub fn generate_pkcs11_pin() -> Result<String, std::io::Error> {
     OpenOptions::new()
