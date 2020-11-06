@@ -23,7 +23,6 @@ use std::sync::atomic::Ordering;
 
 pub mod defs {
     pub const RUN_DIR: &str = "/run/nitro_enclaves/acm";
-    pub const SWAP_TOKEN_LABEL: &str = "p11ne-swap";
     pub const P11_MODULE_NAME: &str = "p11ne";
 
     pub const DEFAULT_CONFIG_PATH: &str = "/etc/nitro_enclaves/acm.yaml";
@@ -34,7 +33,7 @@ pub mod defs {
     pub const DEFAULT_NGINX_FORCE_START: bool = true;
     pub const DEFAULT_NGINX_RELOAD_WAIT_MS: u64 = 1000;
     pub const DEFAULT_SYNC_INTERVAL_SECS: u64 = 600;
-    pub const DEFAULT_TOKEN_REFRESH_INTERVAL_SECS: u64 = 2 * 3600;
+    pub const DEFAULT_TOKEN_REFRESH_INTERVAL_SECS: u64 = 12 * 3600;
     pub const DEFAULT_LOG_LEVEL: log::Level = log::Level::Info;
     pub const DEFAULT_LOG_TIMESTAMP: bool = false;
     pub const DEFAULT_ACM_BUCKET: &str = "prod";
