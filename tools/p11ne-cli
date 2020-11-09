@@ -175,10 +175,15 @@ ensure_vsock_proxy() {
 
 ensure_enclave_resources() {
     local help="
-    You can make sure that enough resources are reserved for the Nitro enclave
-    by running nitro-cli-config shortly after instance boot:
+    You can make sure that enough resources are reserved for the Nitro Enclave
+    by enabling the allocator service to run at instance boot time:
 
-        nitro-cli-config -t <number of CPUs to reserve> -m <memory MiB to reserve>
+        sudo systemctl enable nitro-enclaves-allocator.service
+
+    You can also attempt to allocate enclave resources now by starting the allocator
+    service:
+
+        sudo systemctl start nitro-enclaves-allocator.service
     "
 
     local enclave_cpus=$(cat /sys/module/nitro_enclaves/parameters/ne_cpus | \
@@ -281,7 +286,7 @@ cmd_start() {
         --eif-path "$(p11ne_eif_path)" \
             > /dev/null 2>&1
     ok_or_die "Cannot start the p11ne enclave." \
-        "Have enough resources been allocated via nitro-cli-config?"
+        "Have enough resources been allocated via nitro-enclaves-allocator?"
 
     say "Successfully started the p11ne enclave."
 
