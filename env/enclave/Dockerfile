@@ -14,7 +14,6 @@ ARG USER
 ARG USER_ID
 ARG GROUP_ID
 ARG RUST_TOOLCHAIN
-ARG GITHUB_CREDS
 ARG CTR_HOME
 
 # Force Rust dynamic linking against the Alpine-default musl libc.
@@ -170,7 +169,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $RUST_TOOLC
 
 # NSM LIB
 ENV AWS_NE_NSM_API_VER="v0.1.0"
-RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-nsm-api" \
+RUN git clone "https://github.com/aws/aws-nitro-enclaves-nsm-api" \
     && cd aws-nitro-enclaves-nsm-api \
     && git reset --hard $AWS_NE_NSM_API_VER \
     && PATH="$PATH:/root/.cargo/bin" cargo build --release \
@@ -179,7 +178,7 @@ RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-nsm-api" 
 
 # AWS Nitro Enclaves SDK
 ENV AWS_NE_SDK_VER="v0.1.0"
-RUN git clone "https://$GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-sdk-c" \
+RUN git clone "https://github.com/aws/aws-nitro-enclaves-sdk-c" \
     && cd aws-nitro-enclaves-sdk-c \
     && git reset --hard $AWS_NE_SDK_VER \
     && cmake \

@@ -19,23 +19,19 @@ RUN yum install -y \
 
 RUN mkdir -p /tmp/build
 COPY setup.sh /tmp/build/
-COPY install /tmp/build/install
 RUN cd /tmp/build \
     && chmod +x setup.sh \
-    && ./setup.sh --target devctr --rust-toolchain $RUST_TOOLCHAIN \
+    && ./setup.sh --target devctr \
     && rm -rf /tmp/build
 
 # Create dev-time user if it not already present
-RUN [[ $(id -u) -eq $USER_ID ]] && exit 0; \
+RUN [ $USER_ID -eq 0 ] && exit 0; \
     groupadd -g $GROUP_ID "$USER"; \
     group_name=$(getent group $GROUP_ID | cut -d: -f1) \
-    && useradd -u $USER_ID -d "/home/$USER" -g "$group_name" -s /bin/bash "$USER" \
+    && useradd -u $USER_ID -d "/home/$USER" -g "$group_name" -G docker,ne -s /bin/bash "$USER" \
     && chown -R "$USER:$group_name" "$HOME" \
+    && chown -R "$USER:$group_name" /var/log/nitro_enclaves /run/nitro_enclaves \
     && echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# Set up nitro-cli
-RUN mkdir -p /var/log/nitro_enclaves \
-    && chown $USER_ID:$GROUP_ID /var/log/nitro_enclaves
 
 ENV HOME="$CTR_HOME"
 ENV PATH="$PATH:$HOME/.cargo/bin"

@@ -4,8 +4,8 @@
 
 # Dev container versions. These should be incremented every time a change is made to their
 # respective containers.
-ENCLAVE_CTR_VERSION="1"
-PARENT_CTR_VERSION="1"
+ENCLAVE_CTR_VERSION="2"
+PARENT_CTR_VERSION="2"
 
 MY_NAME="p11ne devtool"
 ENCLAVE_CTR="p11ne-enclave"
@@ -177,6 +177,8 @@ ensure_build_dirs() {
     ok_or_die "Unable to create dir $EVAULT_BUILD_DIR"
     mkdir -p "$EVAULT_RUN_DIR"
     ok_or_die "Unable to create dir $EVAULT_RUN_DIR"
+    mkdir -p "$EVAULT_BUILD_DIR/cargo-registry"
+    ok_or_die "Unable to create dir $EVAULT_BUILD_DIR/cargo-registry"
 }
 
 # Check if Docker is available and exit if it's not.
@@ -193,19 +195,6 @@ ensure_docker() {
         "is running and that you are part of the docker group." \
         "For more information, see" \
         "https://docs.docker.com/install/linux/linux-postinstall/"
-}
-
-ensure_github_creds() {
-    [ -z "$EVAULT_GITHUB_CREDS" ] && {
-        EVAULT_GITHUB_CREDS=$(\
-            cat $HOME/.git-credentials \
-                | sed -n -r "s|https://([^:]+):([^@]+)@github.com|\\1:\\2|p" \
-            )
-    }
-    [ -z "$EVAULT_GITHUB_CREDS" ] && \
-        die "Unable to locate GitHub credentials." \
-            "Please either set EVAULT_GITHUB_CREDS to \$GITHUB_USER:\$GITHUB_PASS" \
-            "or login to GitHub, so that $HOME/.git-credentials gets populated."
 }
 
 # Make sure that the enclave dev container is available. If the (needed version of)
@@ -231,49 +220,14 @@ ensure_parent_ctr() {
     ok_or_die "Parent dev container build failed."
 }
 
-# Args:
-#   $1 - nitro-cli install dir
-build_nitro_cli() {
-    ensure_docker
-    ensure_build_dirs
-    ensure_github_creds
-
-    local install_dir="$1"
-    local src_dir="$EVAULT_BUILD_DIR/aws-nitro-enclaves-cli"
-
-    [[ -d "$src_dir" ]] || {
-        pushd "$EVAULT_BUILD_DIR" \
-            && git clone https://$EVAULT_GITHUB_CREDS@github.com/aws/aws-nitro-enclaves-cli \
-            && popd
-        ok_or_die "Error fetching nitro-cli sources."
-    }
-
-    mkdir -p "$install_dir"
-    ok_or_die "Error creating nitro-cli temp install dir: $install_dir"
-
-    # Build & install nitro-cli to our temp install dir
-    local nitro_cli_ver=05d52c6dded86c79be08d5d4dd04575cc72c86de
-    pushd "$src_dir" \
-        && git fetch origin \
-        && git reset --hard $nitro_cli_ver \
-        && make nitro-cli vsock-proxy \
-        && NITRO_CLI_INSTALL_DIR="$install_dir" make install-tools \
-        && popd
-    ok_or_die "nitro-cli build failed."
-}
-
 build_parent_ctr() {
     ensure_docker
     ensure_build_dirs
-    ensure_github_creds
 
     local ctx_dir="$EVAULT_BUILD_DIR/parent.ctx"
     rm -rf "$ctx_dir" \
         && cp -rf "$EVAULT_SRC_DIR/env/parent" "$ctx_dir"
     ok_or_die "Error setting up context dir: $ctx_dir"
-
-    build_nitro_cli "$ctx_dir/install"
-    ok_or_die "nitro-cli build failed."
 
     docker build -t "$PARENT_CTR_IMG" \
         --build-arg USER=$(whoami) \
@@ -287,14 +241,12 @@ build_parent_ctr() {
 build_enclave_ctr() {
     ensure_docker
     ensure_build_dirs
-    ensure_github_creds
 
     docker build -t "$ENCLAVE_CTR_IMG" \
         --build-arg USER=$(whoami) \
         --build-arg USER_ID=$(id -u) \
         --build-arg GROUP_ID=$(id -g) \
         --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
-        --build-arg GITHUB_CREDS="$EVAULT_GITHUB_CREDS" \
         --build-arg CTR_HOME="$CTR_HOME" \
         "$EVAULT_SRC_DIR/env/enclave"
 }
@@ -337,10 +289,10 @@ build_eif() {
     # TODO: detect docker socket path
     local docker_gid=$(ls -n /var/run/docker.sock | cut -d " " -f4)
     [[ -z "$docker_gid" ]] && die "Unable to find docker socket at /var/run/docker.sock"
-    
+
     if [[ "$eif_signing_dir" != "" ]]; then
-	signing_extra_docker_args="-v $eif_signing_dir:$eif_signing_dir"
-	signing_extra_build_args="--private-key $eif_signing_key --signing-certificate $eif_signing_cert"
+        signing_extra_docker_args="-v $eif_signing_dir:$eif_signing_dir"
+        signing_extra_build_args="--private-key $eif_signing_key --signing-certificate $eif_signing_cert"
     fi
 
     local interactive=
@@ -348,16 +300,16 @@ build_eif() {
     docker run --rm $interactive \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
-	$signing_extra_docker_args \
-        --user "$(id -u):$docker_gid" \
+        $signing_extra_docker_args \
+        --user "$(id -u):$(id -g)" \
+        --group-add=$docker_gid \
         "$PARENT_CTR_IMG" \
         nitro-cli build-enclave \
             --docker-uri "$eif_tag" \
             $signing_extra_build_args \
             --output-file "$CTR_BUILD_DIR/p11ne.eif" \
             > "$EVAULT_BUILD_DIR/image-measurements.json"
-
-    ok_or_die "EIF build failed."
+    ok_or_die "nitro-cli build-enclave failed."
 
     say "Built: $EVAULT_BUILD_DIR/p11ne.eif"
     say "Measurements: $EVAULT_BUILD_DIR/image-measurements.json"
@@ -366,14 +318,9 @@ build_eif() {
 }
 
 build_al2_setup() {
-    ensure_github_creds
-
     local setup_dir="$EVAULT_BUILD_DIR/al2-setup"
     rm -rf "$setup_dir" && mkdir -p "$setup_dir"
     ok_or_die "Unable to create AMI setup dir: $setup_dir"
-
-    build_nitro_cli "$setup_dir/install"
-    ok_or_die "nitro-cli build failed."
 
     cmd_build --release parent-bins
     ok_or_die "p11ne parent binaries build failed."
@@ -434,6 +381,7 @@ cmd_help() {
 #
 cmd_clean() {
     rm -rf "$EVAULT_BUILD_DIR/target"
+    rm -rf "$EVAULT_BUILD_DIR/cargo-registry"
     rm -rf "$EVAULT_BUILD_DIR/parent.ctx"
     rm -rf "$EVAULT_BUILD_DIR/eif.ctx"
     rm -rf "$EVAULT_BUILD_DIR/al2-setup"
@@ -512,6 +460,8 @@ cmd_build() {
         shift
     done
 
+    ensure_build_dirs
+
     #Is the shell interactive?
     if [[ -t 1 ]]; then
         interactive="-it"
@@ -522,6 +472,7 @@ cmd_build() {
         ensure_enclave_ctr
         docker run --rm $interactive \
             -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+            -v "$EVAULT_BUILD_DIR/cargo-registry:$CTR_HOME/.cargo/registry" \
             --workdir "$CTR_SRC_DIR" \
             "$ENCLAVE_CTR_IMG" \
             cargo build "${cargo_args[@]}" --bin "$ev_bin"
@@ -534,6 +485,7 @@ cmd_build() {
         ensure_parent_ctr
         docker run --rm $interactive \
             -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+            -v "$EVAULT_BUILD_DIR/cargo-registry:$CTR_HOME/.cargo/registry" \
             --workdir "$CTR_SRC_DIR" \
             "$PARENT_CTR_IMG" \
             cargo build "${cargo_args[@]}" --bin "$ev_bin"
@@ -601,7 +553,7 @@ cmd_simulate-enclave() {
 }
 
 # Run the dev container, in parent instance mode (i.e. with the p11-kit client configured
-# to look for the vtok shared module over the Unix socket exposed by the enclave container).
+# to look for the p11ne shared module over the Unix socket exposed by the enclave container).
 cmd_simulate-parent() {
     ensure_parent_ctr
 
@@ -620,10 +572,10 @@ cmd_simulate-parent() {
         "$PARENT_CTR_IMG" \
         sh -c "
             echo \"remote:unix:path=$CTR_RUN_DIR/p11kit.sock\" \
-                | sudo tee /etc/pkcs11/modules/vtok.module > /dev/null
-            echo \"module:$EVBIN_P11_MOD\" \
-                | sudo tee -a /etc/pkcs11/modules/vtok.module > /dev/null
-            PS1=\"[$USER@vtok-parent \\W] \" \
+                | sudo tee /etc/pkcs11/modules/p11ne.module > /dev/null
+            echo \"module:p11ne\" \
+                | sudo tee -a /etc/pkcs11/modules/p11ne.module > /dev/null
+            PS1=\"[$USER@p11ne-parent \\W] \" \
                 PATH=\"\$PATH:$CTR_BUILD_DIR/target/debug:$CTR_SRC_DIR/tools\" bash
         "
 }
