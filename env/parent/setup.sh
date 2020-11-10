@@ -5,7 +5,7 @@
 USAGE="
     p11ne installer for Amazon Linux 2 - install and set up p11ne and its dependencies
 
-    Usage: $0 --target <dev|release> [--rust-toolchain <version>]
+    Usage: $0 --target <devctr|release>
 
     This scripts expects:
     - an Amazon Linux 2 environment, preferably a clean base AMI;
@@ -29,7 +29,6 @@ BUILD_DEPS=(
     gcc
     gettext-devel
     git
-    libtasn1-devel
     libffi-devel
     libtool
     make
@@ -62,54 +61,31 @@ p11ne_setup_parent() {
         && yum install -y gnutls-utils jq tar p11-kit
     ok_or_die
 
-    amazon-linux-extras install -y docker nginx1
+    amazon-linux-extras install -y docker aws-nitro-enclaves-cli nginx1 \
+        && yum install -y aws-nitro-enclaves-cli-devel
     ok_or_die
 
     cd "$THIS_DIR"
 
-    [[ -d install ]] \
-        && pushd install \
+    if [[ -d install ]]; then
+        pushd install \
             && tar -c . | tar -xC / \
             && popd
-    ok_or_die "Pre-built rootfs install failed."
+        ok_or_die "Pre-built rootfs install failed."
+    fi
 
     if p11ne_is_release_setup; then
         systemctl enable docker
+        systemctl enable nitro-enclaves-allocator
         ok_or_die "Error setting up startup services"
 
         # Make sure ec2-user has access to nitro-cli resources
-        mkdir -p /var/log/nitro_enclaves \
-            && groupadd $NITRO_ENCLAVES_GROUP \
-            && usermod -aG $NITRO_ENCLAVES_GROUP ec2-user \
-            && usermod -aG docker ec2-user \
-            && chown root:$NITRO_ENCLAVES_GROUP /var/log/nitro_enclaves \
-            && chmod 774 /var/log/nitro_enclaves \
-            && echo "d /run/nitro_enclaves 0775 root $NITRO_ENCLAVES_GROUP - -" \
-                > /usr/lib/tmpfiles.d/nitro_enclaves.conf
-        ok_or_die "Unable to set up nitro enclaves group."
-
-        echo "KERNEL==\"nitro_enclaves\" \
-            SUBSYSTEM==\"misc\" \
-            OWNER=\"root\" \
-            GROUP=\"$NITRO_ENCLAVES_GROUP\" \
-            MODE=\"0660\"" \
-            > /usr/lib/udev/rules.d/99-nitro_enclaves.rules
-        ok_or_die "Unable to set up nitro_enclaves udev rule."
+        usermod -aG $NITRO_ENCLAVES_GROUP ec2-user \
+            && usermod -aG docker ec2-user
+        ok_or_die "Unable to grant Nitro Enclaves access to ec2-user."
     fi
 
     mkdir -p "$THIS_DIR/src" && cd "$THIS_DIR/src"
-
-    # Install pkgconf from sources (AL2 version is too old).
-    git clone https://github.com/pkgconf/pkgconf.git \
-        && pushd pkgconf \
-        && git reset --hard pkgconf-1.7.3 \
-        && ln -s /usr/share/libtool/config/ltmain.sh ltmain.sh \
-        && ./autogen.sh \
-        && ./configure --prefix=/usr \
-        && make -j $(nproc) \
-        && make install
-    ok_or_die
-    popd
 
     # TODO: update to a newer, untagged commit, if we need the pin-source feature.
     # Install libp11 (openssl PKCS#11 engine) from sources
