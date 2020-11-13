@@ -17,14 +17,15 @@ pub enum SleepError {
 pub fn interruptible_sleep(dur: Duration) -> Result<(), SleepError> {
     let wake_time = Instant::now() + dur;
     loop {
-        let left = match wake_time.checked_duration_since(Instant::now()) {
-            Some(dur) => libc::timespec {
-                tv_sec: dur.as_secs() as libc::time_t,
-                tv_nsec: dur.subsec_nanos() as libc::c_long,
-            },
-            None => return Ok(()),
+        let now = Instant::now();
+        if now >= wake_time {
+            return Ok(());
+        }
+        let remaining = libc::timespec {
+            tv_sec: (wake_time - now).as_secs() as libc::time_t,
+            tv_nsec: (wake_time - now).subsec_nanos() as libc::c_long,
         };
-        unsafe { libc::nanosleep(&left, std::ptr::null_mut()) };
+        unsafe { libc::nanosleep(&remaining, std::ptr::null_mut()) };
         if gdata::EXIT_CONDITION.load(Ordering::SeqCst) {
             return Err(SleepError::UserExit);
         }
