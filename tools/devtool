@@ -5,7 +5,7 @@
 # Dev container versions. These should be incremented every time a change is made to their
 # respective containers.
 ENCLAVE_CTR_VERSION="2"
-PARENT_CTR_VERSION="2"
+PARENT_CTR_VERSION="3"
 
 MY_NAME="p11ne devtool"
 ENCLAVE_CTR="p11ne-enclave"
@@ -31,7 +31,8 @@ EVBIN_CLI=p11ne-cli
 EVBIN_INIT=p11ne-init
 EVBIN_P11_MOD=libvtok_p11.so
 
-EVAULT_RUST_TOOLCHAIN=1.46.0
+P11NE_PARENT_RUST_TOOLCHAIN=1.38.0
+P11NE_ENCLAVE_RUST_TOOLCHAIN=1.46.0
 
 USAGE="\
 $MY_NAME
@@ -233,7 +234,7 @@ build_parent_ctr() {
         --build-arg USER=$(whoami) \
         --build-arg USER_ID=$(id -u) \
         --build-arg GROUP_ID=$(id -g) \
-        --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
+        --build-arg RUST_TOOLCHAIN="$P11NE_PARENT_RUST_TOOLCHAIN" \
         --build-arg CTR_HOME="$CTR_HOME" \
         "$ctx_dir"
 }
@@ -246,7 +247,7 @@ build_enclave_ctr() {
         --build-arg USER=$(whoami) \
         --build-arg USER_ID=$(id -u) \
         --build-arg GROUP_ID=$(id -g) \
-        --build-arg RUST_TOOLCHAIN="$EVAULT_RUST_TOOLCHAIN" \
+        --build-arg RUST_TOOLCHAIN="$P11NE_ENCLAVE_RUST_TOOLCHAIN" \
         --build-arg CTR_HOME="$CTR_HOME" \
         "$EVAULT_SRC_DIR/env/enclave"
 }
