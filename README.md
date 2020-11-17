@@ -1,4 +1,4 @@
-# Aws Certificate Manager for Nitro Enclaves
+# AWS Certificate Manager for Nitro Enclaves
 
 This is a PKCS#11 provider intended to be executed within the confines of a
 Nitro Enclave.
