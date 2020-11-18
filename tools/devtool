@@ -359,6 +359,12 @@ build_al2_setup() {
         && install -D -m 0644 \
             "$EVAULT_SRC_DIR/src/vtok_agent/service/acm.example.yaml" \
             "install${my_sysconf_dir}/acm.example.yaml" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/THIRD-PARTY-LICENSES" \
+            "install/usr/share/licenses/aws-nitro-enclaves-acm-1.0/THIRD-PARTY-LICENSES" \
+        && install -D -m 0644 \
+            "$EVAULT_SRC_DIR/LICENSE" \
+            "install/usr/share/licenses/aws-nitro-enclaves-acm-1.0/LICENSE" \
         && install -D -m 0755 \
             "$EVAULT_SRC_DIR/env/parent/setup.sh" \
             "./setup.sh"
