@@ -193,7 +193,7 @@ RUN git clone "https://github.com/aws/aws-nitro-enclaves-sdk-c" \
 RUN [ $USER_ID -eq 0 ] && exit 0; \
     groupadd -g $GROUP_ID $USER; \
     group_name=$(getent group $GROUP_ID | cut -d: -f1) \
-    && useradd -u $USER_ID -m -d "/home/$USER" -g "$group_name" -s /bin/sh $USER \
+    && useradd -l -u $USER_ID -m -d "/home/$USER" -g "$group_name" -s /bin/sh $USER \
     && echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && mv /root/.cargo "/home/$USER/.cargo" \
     && mv /root/.rustup "/home/$USER/.rustup" \

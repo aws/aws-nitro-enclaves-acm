@@ -28,7 +28,7 @@ RUN cd /tmp/build \
 RUN [ $USER_ID -eq 0 ] && exit 0; \
     groupadd -g $GROUP_ID "$USER"; \
     group_name=$(getent group $GROUP_ID | cut -d: -f1) \
-    && useradd -u $USER_ID -d "/home/$USER" -g "$group_name" -G docker,ne -s /bin/bash "$USER" \
+    && useradd -l -u $USER_ID -d "/home/$USER" -g "$group_name" -G docker,ne -s /bin/bash "$USER" \
     && chown -R "$USER:$group_name" "$HOME" \
     && chown -R "$USER:$group_name" /var/log/nitro_enclaves /run/nitro_enclaves \
     && echo "$USER ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
