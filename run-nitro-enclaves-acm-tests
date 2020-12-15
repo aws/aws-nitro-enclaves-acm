@@ -1,9 +1,71 @@
 #!/bin/bash
 
-ERR_MISSING_BIN=1
-ERR_MISSING_FILE=2
+# Error codes related to package installation files
+ERROR_MISSING_BIN=1
+ERROR_MISSING_FILE=2
 
-ERR_CODE=0
+ERROR_CODE=0
+
+# Error codes which get stacked when a specifc action fails
+ERROR_SETUP=3
+ERROR_INIT_TOKEN=4
+ERROR_VERIFY=5
+ERROR_DECRYPT=6
+ERROR_REFRESH=7
+ERROR_RELEASE=8
+ERROR_CRYPTOGRAPHIC_TESTS=9
+ERROR_LIST_MODULES=10
+ERROR_P11_LIST_TOKEN=11
+ERRORS=""
+
+
+# Resources which are to be downloaded locally
+ACM_FOR_NE_REPO_S3="acm-for-ne-rpm-testing-deps"
+ACM_FOR_NE_REPO_ARCH="aws-nitro-enclaves-acm.tar.gz"
+ACM_FOR_NE_REPO_DIR="aws-nitro-enclaves-acm"
+
+# Binaries installed through the previous resources
+P11NE_CLI="p11ne-cli"
+P11NE_DB="p11ne-db"
+
+BINDIR="/usr/bin"
+
+# Identifiers used throughout testing
+KEY_PATH="key.pem"
+KEY_ID="1"
+KEY_DB="key.db"
+KEY_LABEL="mykey"
+KEY_OUT_FILE="key"
+KMS_KEY_ID="feb1bc22-0fda-424a-b451-231334b0ca03"
+KMS_KEY_REGION="us-east-1"
+
+TOKEN_LABEL_RSA="test-token-rsa"
+TOKEN_LABEL_SECP384R1_EC="test-token-secp384r1-ec"
+TOKEN_PIN="1234"
+
+TMP_TEST_DIR=".tmp-acm-for-ne"
+TMP_CRYPTOGRAPHIC_TESTS_OUT=".cryptographic_tests_results.out"
+P11_KIT="p11-kit"
+P11_TOOL="p11tool"
+
+# Stores the NE ACM service file and a flag which tells
+# whether the service was active prior to starting the tests
+# (0 = is active / anything else = is not active)
+NE_ACM_SERVICE="nitro-enclaves-acm.service"
+NE_ACM_SERVICE_RUNNING=0
+
+# Used for taking into account the delay with which the describe-token
+# result might be reported (during testing, the "ttl_secs" field was
+# sometimes reported with 1 second less than the expected value)
+EPS=1
+# Flag used for printing errors encountered during tests
+VERBOSE=0
+# Wait a bit after the NE ACM service has been stopped in order to
+# allow the p11 enclave to terminate
+SLEEP_AFTER_SERVICE_STOP=5
+
+
+INIT_DIR="$(pwd)"
 
 # Binaries which should exist under $PATH after package installation
 acm_ne_bins_array=("nitro-cli" \
@@ -21,13 +83,41 @@ acm_ne_files_array=("/lib/systemd/system/nitro-enclaves-allocator.service" \
 		    "/usr/share/nitro_enclaves/p11ne/acm.example.yaml" \
 		   )
 
+function configure_aux_tools {
+	local prev_dir
+
+	# Fetch GitHub repo, as some tools do not come with the RPM
+	prev_dir=$(pwd) && mkdir -p $TMP_TEST_DIR && cd $TMP_TEST_DIR || return
+	aws s3 cp s3://$ACM_FOR_NE_REPO_S3/$ACM_FOR_NE_REPO_ARCH . > /dev/null || exit $ERROR_SETUP
+	tar -zxf $ACM_FOR_NE_REPO_ARCH || exit $ERROR_SETUP
+
+	# Install p11ne-cli and p11ne-db
+	sudo install -D -m 0755 $ACM_FOR_NE_REPO_DIR/tools/$P11NE_CLI $BINDIR || exit $ERROR_SETUP
+	sudo install -D -m 0755 $ACM_FOR_NE_REPO_DIR/tools/$P11NE_DB $BINDIR || exit $ERROR_SETUP
+}
+
+function ensure_testhelpers {
+	local prev_dir
+
+	mkdir -p "$HOME"/.tmp-helper
+	cp -r ./$ACM_FOR_NE_REPO_DIR/tests/helpers "$HOME"/.tmp-helper
+	prev_dir=$(pwd) \
+		&& cd "$HOME"/.tmp-helper/helpers \
+		&& cargo build --release 2> /dev/null
+	cd "$prev_dir" || return
+	cp "$HOME"/.tmp-helper/helpers/target/release/testhelpers ./$ACM_FOR_NE_REPO_DIR/tests/
+	rm -rf "$HOME"/.tmp-helper
+	rm -rf ./$ACM_FOR_NE_REPO_DIR/tests/results
+}
 
 function test_acm_ne_bins() {
+	local ret
+
 	echo -n "Checking that ACM NE binaries are installed .........."
 
 	for binary in "${acm_ne_bins_array[@]}"; do
-		local ret=$(which "$binary" 2>&1)
-		echo $ret | grep "no $binary in" > /dev/null 2>&1 && echo " [FAIL]" && ERR_CODE=$ERR_MISSING_BIN && return
+		ret=$(which "$binary" 2>&1)
+		echo "$ret" | grep "no $binary in" > /dev/null 2>&1 && echo " [FAIL]" && ERROR_CODE=$ERROR_MISSING_BIN && return
 	done
 
 	echo "[PASS]"
@@ -38,21 +128,299 @@ function test_acm_ne_files() {
 
 	for file in "${acm_ne_files_array[@]}"; do
 		if [ ! -f "$file" ]; then
-			echo " [FAIL]" && ERR_CODE=$ERR_MISSING_FILE && return
+			echo " [FAIL]" && ERROR_CODE=$ERROR_MISSING_FILE && return
 		fi
 	done
 
 	echo "[PASS]"
 }
 
-function run_test() {
+function test_token_rsa_key {
+	local out
+	local key_uri
+	local key_uri_base
+	local ttl_init
+	local ttl_end
+
+	echo -n "Testing token initialized from RSA key .......... "
+
+	# Stop an enclave if it is already running
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl stop $NE_ACM_SERVICE
+		sleep $SLEEP_AFTER_SERVICE_STOP
+	fi
+
+	# Start the p11ne enclave
+	$P11NE_CLI start > /dev/null 2>&1
+
+	# Generate and use and RSA key for both sign / verify
+	# and encrypt / decrypt
+	openssl genrsa -out key.pem 2048 > /dev/null 2>&1
+
+	$P11NE_DB pack-key --id $KEY_ID --label $KEY_LABEL --key-file $KEY_PATH --out-file $KEY_OUT_FILE --kms-key-id $KMS_KEY_ID --kms-region $KMS_KEY_REGION
+
+	out=$($P11NE_CLI init-token \
+		--key-db $KEY_DB \
+		--label $TOKEN_LABEL_RSA \
+		--pin $TOKEN_PIN)
+	echo "$out" | grep "\"Ok\": \"None\"" > /dev/null || ERRORS="$ERRORS $ERROR_INIT_TOKEN"
+
+	out=$($P11NE_CLI describe-device)
+	ttl_init=$($P11NE_CLI describe-device \
+		| jq '.Ok.DeviceDescription.tokens[] | select(.label == "test-token")' \
+		| grep "ttl_secs" \
+		| sed -e "s/[[:space:]]\+/ /g" \
+		| cut -d' ' -f3)
+
+	out=$($P11NE_CLI describe-token \
+		--label $TOKEN_LABEL_RSA \
+		--pin $TOKEN_PIN)
+
+	key_uri=$(echo "$out" | jq '.' | grep "\"uri\"" | cut -d'"' -f4)
+	key_uri_base=$(echo "$key_uri" | cut -d' ' -f 2 | cut -d'"' -f2 | rev | cut -d'=' -f2- | rev)
+
+	# Test sign / verify
+	echo "Sign This" > input
+	openssl dgst \
+		-keyform engine \
+		-engine pkcs11 \
+		-sign "${key_uri_base}=private?pin-value=${TOKEN_PIN}" \
+		-out test.sig input 2> /dev/null
+	out=$(openssl dgst \
+		-keyform engine \
+		-engine pkcs11 \
+		-verify "${key_uri_base}=public" \
+		-signature test.sig input 2> /dev/null)
+	echo "$out" | grep "Verified OK" > /dev/null || ERRORS="$ERRORS $ERROR_VERIFY"
+
+	# Test encrypt / decrypt
+	echo "Encrypt This" > input
+	openssl pkeyutl \
+		-keyform engine \
+		-engine pkcs11 \
+		-encrypt \
+		-pubin \
+		-inkey "${key_uri_base}=public" \
+		-out test.crypt -in input 2> /dev/null
+	openssl pkeyutl \
+		-keyform engine \
+		-engine pkcs11 \
+		-decrypt \
+		-inkey "${key_uri_base}=private?pin-value=${TOKEN_PIN}" \
+		-in test.crypt > test.decrypt 2> /dev/null
+	out=$(diff input test.decrypt)
+	[[ -z $out ]] || ERRORS="$ERRORS $ERROR_DECRYPT"
+
+	# Test refresh token
+	out=$($P11NE_CLI refresh-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN)
+	echo "$out" | grep "\"Ok\": \"None\"" > /dev/null || ERRORS="$ERRORS $ERROR_REFRESH"
+
+	out=$($P11NE_CLI describe-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN)
+	ttl_end=$(echo "$out" | jq '.' | grep "ttl_secs" | sed -e "s/[[:space:]]\+/ /g" | cut -d' ' -f3 | sed "s/.$//")
+
+	[[ $(( ttl_end + EPS )) -ge $ttl_init ]] || ERRORS="$ERRORS $ERROR_REFRESH"
+
+	# Release token
+	out=$($P11NE_CLI release-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN)
+	echo "$out" | grep "\"Ok\": \"None\"" > /dev/null || ERRORS="$ERRORS $ERROR_RELEASE"
+	out=$($P11NE_CLI describe-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN)
+	echo "$out" | grep "\"Err\": \"TokenNotFound\"" > /dev/null || ERRORS="$ERRORS $ERROR_RELEASE"
+
+	# Stop the p11ne enclave
+	$P11NE_CLI stop > /dev/null 2>&1
+
+	if [[ -z $ERRORS ]]; then
+		echo "[PASS]"
+	else
+		echo "[FAIL]"
+	fi
+
+	# Re-enable the NE ACM service if it was active
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl start $NE_ACM_SERVICE
+	fi
+}
+
+function test_token_ec_secp384r1_key {
+	local out
+	local key_uri
+	local key_uri_base
+	local ttl_init
+	local ttl_end
+
+	echo -n "Testing token initialized from secp384r1 EC key .......... "
+
+	# Stop an enclave if it is already running
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl stop $NE_ACM_SERVICE
+		sleep $SLEEP_AFTER_SERVICE_STOP
+	fi
+
+	# Start the p11ne enclave
+	$P11NE_CLI start > /dev/null 2>&1
+
+	# Generate and use an secp384r1 EC key
+	openssl genrsa -out key.pem 2048 > /dev/null 2>&1
+	openssl ecparam -name secp384r1 -genkey -noout -out key.pem
+
+	$P11NE_DB pack-key --id $KEY_ID --label $KEY_LABEL --key-file $KEY_PATH --out-file $KEY_OUT_FILE --kms-key-id $KMS_KEY_ID --kms-region $KMS_KEY_REGION
+
+	out=$($P11NE_CLI init-token \
+		--key-db $KEY_DB \
+		--label $TOKEN_LABEL_SECP384R1_EC \
+		--pin $TOKEN_PIN)
+	echo "$out" | grep "\"Ok\": \"None\"" > /dev/null || ERRORS="$ERRORS $ERROR_INIT_TOKEN"
+
+	out=$($P11NE_CLI describe-device)
+	ttl_init=$($P11NE_CLI describe-device \
+		| jq '.Ok.DeviceDescription.tokens[] | select(.label == "test-token")' \
+		| grep "ttl_secs" \
+		| sed -e "s/[[:space:]]\+/ /g" \
+		| cut -d' ' -f3)
+
+	out=$($P11NE_CLI describe-token \
+		--label $TOKEN_LABEL_SECP384R1_EC \
+		--pin $TOKEN_PIN)
+
+	key_uri=$(echo "$out" | jq '.' | grep "\"uri\"" | cut -d'"' -f4)
+	key_uri_base=$(echo "$key_uri" | cut -d' ' -f 2 | cut -d'"' -f2 | rev | cut -d'=' -f2- | rev)
+
+	# Test sign / verify
+	echo "Sign This" > input
+	openssl dgst \
+		-keyform engine \
+		-engine pkcs11 \
+		-sign "${key_uri_base}=private?pin-value=${TOKEN_PIN}" \
+		-out test.sig input 2> /dev/null
+	out=$(openssl dgst \
+		-keyform engine \
+		-engine pkcs11 \
+		-verify "${key_uri_base}=public" \
+		-signature test.sig input 2> /dev/null)
+	echo "$out" | grep "Verified OK" > /dev/null || ERRORS="$ERRORS $ERROR_VERIFY"
+
+	# Test refresh token
+	out=$($P11NE_CLI refresh-token --label $TOKEN_LABEL_SECP384R1_EC --pin $TOKEN_PIN)
+	echo "$out" | grep "\"Ok\": \"None\"" > /dev/null || ERRORS="$ERRORS $ERROR_REFRESH"
+
+	out=$($P11NE_CLI describe-token --label $TOKEN_LABEL_SECP384R1_EC --pin $TOKEN_PIN)
+	ttl_end=$(echo "$out" | jq '.' | grep "ttl_secs" | sed -e "s/[[:space:]]\+/ /g" | cut -d' ' -f3 | sed "s/.$//")
+
+	[[ $(( ttl_end + EPS )) -ge $ttl_init ]] || ERRORS="$ERRORS $ERROR_REFRESH"
+
+	# Release token
+	out=$($P11NE_CLI release-token --label $TOKEN_LABEL_SECP384R1_EC --pin $TOKEN_PIN)
+	echo "$out" | grep "\"Ok\": \"None\"" > /dev/null || ERRORS="$ERRORS $ERROR_RELEASE"
+	out=$($P11NE_CLI describe-token --label $TOKEN_LABEL_SECP384R1_EC --pin $TOKEN_PIN)
+	echo "$out" | grep "\"Err\": \"TokenNotFound\"" > /dev/null || ERRORS="$ERRORS $ERROR_RELEASE"
+
+	# Stop the p11ne enclave
+	$P11NE_CLI stop > /dev/null 2>&1
+
+	if [[ -z $ERRORS ]]; then
+		echo "[PASS]"
+	else
+		echo "[FAIL]"
+	fi
+
+	# Re-enable the NE ACM service if it was active
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl start $NE_ACM_SERVICE
+	fi
+}
+
+function test_cryptographic_capabilities {
+	echo -n "Cryptographic tests .......... "
+
+	# Stop an enclave if it is already running
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl stop $NE_ACM_SERVICE
+		sleep $SLEEP_AFTER_SERVICE_STOP
+	fi
+
+	ensure_testhelpers
+
+	./$ACM_FOR_NE_REPO_DIR/tests/testtool openssl \
+		--kms-key-id $KMS_KEY_ID \
+		--kms-region $KMS_KEY_REGION > $TMP_CRYPTOGRAPHIC_TESTS_OUT
+
+	grep "FAILED" $TMP_CRYPTOGRAPHIC_TESTS_OUT > /dev/null && ERRORS="$ERRORS $ERROR_CRYPTOGRAPHIC_TESTS"
+
+	if [[ "$(grep -c FAILED $TMP_CRYPTOGRAPHIC_TESTS_OUT)"	== "0" ]]; then
+		echo "[PASS]"
+	else
+		echo "[FAIL]"
+	fi
+
+	rm -f $TMP_CRYPTOGRAPHIC_TESTS_OUT
+
+	# Re-enable the NE ACM service if it was active
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl start $NE_ACM_SERVICE
+	fi
+}
+
+function test_al2_libp11 {
+	local out
+
+	echo -n "Testing AL2 libp11 .......... "
+
+	# Stop an enclave if it is already running
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl stop $NE_ACM_SERVICE
+		sleep $SLEEP_AFTER_SERVICE_STOP
+	fi
+
+	$P11NE_CLI start > /dev/null 2>&1
+
+	$P11NE_CLI init-token \
+		--key-db $KEY_DB \
+		--label $TOKEN_LABEL_RSA \
+		--pin $TOKEN_PIN > /dev/null
+
+	out=$($P11_KIT list-modules > /dev/null 2>&1)
+	echo "$out" | grep "manufacturer: Amazon" > /dev/null || ERRORS="$ERRORS $ERROR_LIST_MODULES"
+
+	out="$($P11_TOOL --list-all 2> /dev/null | grep $TOKEN_LABEL_RSA | cut -d' ' -f3)"
+	if [[ -z $out ]]; then
+		ERRORS="$ERRORS $ERROR_P11_LIST_TOKEN"
+		echo "[FAIL]"
+	else
+		echo "[PASS]"
+	fi
+
+	# Release token
+	$P11NE_CLI release-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN > /dev/null
+
+	# Re-enable the NE ACM service if it was active
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
+		sudo systemctl start $NE_ACM_SERVICE
+	fi
+}
+
+function run_tests() {
+	NE_ACM_SERVICE_RUNNING=$(systemctl is-active --quiet $NE_ACM_SERVICE)
+
 	test_acm_ne_bins
 	test_acm_ne_files
+
+	configure_aux_tools
+	test_token_rsa_key
+	test_token_ec_secp384r1_key
+	test_cryptographic_capabilities
+	test_al2_libp11
+
+	cd "$INIT_DIR" || return
+	rm -rf $TMP_TEST_DIR
+
+	if [[ "$VERBOSE" == 1 ]]; then
+		echo "Error string: $ERRORS"
+	fi
 }
 
 
-run_test
+run_tests
 
-if [ $ERR_CODE -ne 0 ]; then
-	echo "Tests exit code: $ERR_CODE" && exit $ERR_CODE
+if [ $ERROR_CODE -ne 0 ]; then
+	echo "Tests exit code: $ERROR_CODE" && exit $ERROR_CODE
 fi
