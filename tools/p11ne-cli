@@ -391,7 +391,7 @@ cmd_init-token() {
     # Execute RPC
     local result
     result=$(execute_rpc "$rpc_request")
-    echo "$result" | jq
+    echo "$result" | jq '.'
 }
 
 # Refresh a token
@@ -434,7 +434,7 @@ cmd_refresh-token() {
     # Execute RPC
     local result
     result=$(execute_rpc "$rpc_request")
-    echo "$result" | jq
+    echo "$result" | jq '.'
 }
 
 # Release a token
@@ -465,7 +465,7 @@ cmd_release-token() {
     # Execute RPC
     local result
     result=$(execute_rpc "$rpc_request")
-    echo "$result" | jq
+    echo "$result" | jq '.'
 }
 
 # Get the device status
@@ -479,7 +479,7 @@ cmd_describe-device() {
     # Execute RPC
     local result
     result=$(execute_rpc "{\"DescribeDevice\": null}")
-    echo "$result" | jq
+    echo "$result" | jq '.'
 }
 
 # Describe a token
@@ -510,7 +510,7 @@ cmd_describe-token() {
     # Execute RPC
     local result
     result=$(execute_rpc "$rpc_request")
-    echo "$result" | jq
+    echo "$result" | jq '.'
 }
 
 main() {
