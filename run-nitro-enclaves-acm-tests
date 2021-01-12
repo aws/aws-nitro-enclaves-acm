@@ -17,6 +17,7 @@ ERROR_CRYPTOGRAPHIC_TESTS=9
 ERROR_LIST_MODULES=10
 ERROR_P11_LIST_TOKEN=11
 ERRORS=""
+UNUSED_VAR=""
 
 
 # Resources which are to be downloaded locally
