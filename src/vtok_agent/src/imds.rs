@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
+use log::warn;
 use serde::Deserialize;
 use serde_json;
 use std::process::Command;
@@ -32,6 +33,41 @@ pub struct IamInfo {
     pub instance_profile_arn: String,
     #[serde(rename = "InstanceProfileId")]
     pub instance_profile_id: String,
+}
+
+#[allow(non_snake_case, dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct IamRole {
+    #[serde(rename = "Path")]
+    #[serde(skip)]
+    pub path: serde_json::Value,
+    #[serde(rename = "RoleName")]
+    #[serde(skip)]
+    pub role_name: serde_json::Value,
+    #[serde(rename = "RoleId")]
+    #[serde(skip)]
+    pub role_id: serde_json::Value,
+    #[serde(rename = "Arn")]
+    pub arn: String,
+    #[serde(rename = "CreateDate")]
+    #[serde(skip)]
+    pub create_date: serde_json::Value,
+    #[serde(rename = "AssumeRolePolicyDocument")]
+    #[serde(skip)]
+    pub assume_role_policy_document: serde_json::Value,
+    #[serde(rename = "MaxSessionDuration")]
+    #[serde(skip)]
+    pub max_session_duration: serde_json::Value,
+    #[serde(rename = "RoleLastUsed")]
+    #[serde(skip)]
+    pub role_last_used: serde_json::Value,
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, Deserialize)]
+pub struct IamRoleInfo {
+    #[serde(rename = "Role")]
+    pub role: IamRole,
 }
 
 #[allow(non_snake_case, dead_code)]
@@ -124,21 +160,42 @@ impl ImdsCache {
     }
 
     fn fetch_role_arn() -> Result<String, Error> {
-        let profile_arn =
-            serde_json::from_str::<IamInfo>(&Self::fetch("/latest/meta-data/iam/info")?)
-                .and_then(|info| Ok(info.instance_profile_arn))
-                .map_err(Error::ParseError)?;
         let role_name = Self::fetch_role_name()?;
 
-        let role_arn = profile_arn
-            .split(":")
-            .map(|word| match word.find("instance-profile/") {
-                Some(_) => format!("role/{}", role_name),
-                None => word.to_string(),
-            })
-            .collect::<Vec<String>>()
-            .join(":");
-        Ok(role_arn)
+        let output = Command::new("aws")
+            .arg("iam")
+            .arg("get-role")
+            .arg("--role-name")
+            .arg(format!("{}", role_name))
+            .output()
+            .map_err(Error::IoError)?;
+        // If error, fallback to use the IMDS info to get the IAM role arn.
+        // Note: This logic would not work for IAM roles which include paths.
+        if !output.status.success() {
+            warn!("Cannot fetch IAM role arn using the AWS CLI iam get-role command. Falling back to using IMDS.");
+            warn!("For IAM roles with paths included, please add the IAM policy permission for iam:GetRole as per documentation - https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-refapp.html.");
+            let profile_arn =
+                serde_json::from_str::<IamInfo>(&Self::fetch("/latest/meta-data/iam/info")?)
+                    .and_then(|info| Ok(info.instance_profile_arn))
+                    .map_err(Error::ParseError)?;
+
+            let role_arn = profile_arn
+                .split(":")
+                .map(|word| match word.find("instance-profile/") {
+                    Some(_) => format!("role/{}", role_name),
+                    None => word.to_string(),
+                })
+                .collect::<Vec<String>>()
+                .join(":");
+
+            return Ok(role_arn);
+        }
+
+        let iam_role_info: IamRoleInfo =
+            serde_json::from_str(&String::from_utf8(output.stdout).map_err(Error::Utf8Error)?)
+                .map_err(Error::ParseError)?;
+
+        Ok(iam_role_info.role.arn)
     }
 
     fn fetch_creds() -> Result<SecurityCredentials, Error> {
