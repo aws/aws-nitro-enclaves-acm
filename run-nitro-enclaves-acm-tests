@@ -83,6 +83,20 @@ acm_ne_files_array=("/lib/systemd/system/nitro-enclaves-allocator.service" \
 		    "/usr/share/nitro_enclaves/p11ne/acm.example.yaml" \
 		   )
 
+function check_usage {
+	if [[ $1 -gt 2 ]]; then
+		echo "Usage: $0 [CUSTOM_DEPENDENCIES_S3_BUCKET] [KMS_KEY_ID]"
+		exit $ERROR_SETUP
+	fi
+
+	if [[ $1 -ge 2 ]]; then
+		KMS_KEY_ID="$3"
+	fi
+	if [[ $1 -ge 1 ]]; then
+		ACM_FOR_NE_REPO_S3="$2"
+	fi
+}
+
 function configure_aux_tools {
 	local prev_dir
 
@@ -167,7 +181,7 @@ function test_token_rsa_key {
 
 	out=$($P11NE_CLI describe-device)
 	ttl_init=$($P11NE_CLI describe-device \
-		| jq '.Ok.DeviceDescription.tokens[] | select(.label == "test-token")' \
+		| jq '.Ok.DeviceDescription.tokens[] | select(.label == "test-token-rsa")' \
 		| grep "ttl_secs" \
 		| sed -e "s/[[:space:]]\+/ /g" \
 		| cut -d' ' -f3)
@@ -273,7 +287,7 @@ function test_token_ec_secp384r1_key {
 
 	out=$($P11NE_CLI describe-device)
 	ttl_init=$($P11NE_CLI describe-device \
-		| jq '.Ok.DeviceDescription.tokens[] | select(.label == "test-token")' \
+		| jq '.Ok.DeviceDescription.tokens[] | select(.label == "test-token-secp384r1-ec")' \
 		| grep "ttl_secs" \
 		| sed -e "s/[[:space:]]\+/ /g" \
 		| cut -d' ' -f3)
@@ -378,7 +392,7 @@ function test_al2_libp11 {
 		--label $TOKEN_LABEL_RSA \
 		--pin $TOKEN_PIN > /dev/null
 
-	out=$($P11_KIT list-modules > /dev/null 2>&1)
+	out=$($P11_KIT list-modules 2> /dev/null)
 	echo "$out" | grep "manufacturer: Amazon" > /dev/null || ERRORS="$ERRORS $ERROR_LIST_MODULES"
 
 	out="$($P11_TOOL --list-all 2> /dev/null | grep $TOKEN_LABEL_RSA | cut -d' ' -f3)"
@@ -405,6 +419,7 @@ function run_tests() {
 	test_acm_ne_files
 
 	configure_aux_tools
+
 	test_token_rsa_key
 	test_token_ec_secp384r1_key
 	test_cryptographic_capabilities
@@ -419,6 +434,7 @@ function run_tests() {
 }
 
 
+check_usage $# "$@"
 run_tests
 
 if [ $ERROR_CODE -ne 0 ]; then
