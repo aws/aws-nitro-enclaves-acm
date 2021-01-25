@@ -62,7 +62,7 @@ EPS=1
 VERBOSE=0
 # Wait a bit after the NE ACM service has been stopped in order to
 # allow the p11 enclave to terminate
-SLEEP_AFTER_SERVICE_STOP=5
+SLEEP_AFTER_SERVICE_STOP=10
 
 
 INIT_DIR="$(pwd)"
@@ -158,15 +158,6 @@ function test_token_rsa_key {
 
 	echo -n "Testing token initialized from RSA key .......... "
 
-	# Stop an enclave if it is already running
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl stop $NE_ACM_SERVICE
-		sleep $SLEEP_AFTER_SERVICE_STOP
-	fi
-
-	# Start the p11ne enclave
-	$P11NE_CLI start > /dev/null 2>&1
-
 	# Generate and use and RSA key for both sign / verify
 	# and encrypt / decrypt
 	openssl genrsa -out key.pem 2048 > /dev/null 2>&1
@@ -240,18 +231,10 @@ function test_token_rsa_key {
 	out=$($P11NE_CLI describe-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN)
 	echo "$out" | grep "\"Err\": \"TokenNotFound\"" > /dev/null || ERRORS="$ERRORS $ERROR_RELEASE"
 
-	# Stop the p11ne enclave
-	$P11NE_CLI stop > /dev/null 2>&1
-
 	if [[ -z $ERRORS ]]; then
 		echo "[PASS]"
 	else
 		echo "[FAIL]"
-	fi
-
-	# Re-enable the NE ACM service if it was active
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl start $NE_ACM_SERVICE
 	fi
 }
 
@@ -263,15 +246,6 @@ function test_token_ec_secp384r1_key {
 	local ttl_end
 
 	echo -n "Testing token initialized from secp384r1 EC key .......... "
-
-	# Stop an enclave if it is already running
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl stop $NE_ACM_SERVICE
-		sleep $SLEEP_AFTER_SERVICE_STOP
-	fi
-
-	# Start the p11ne enclave
-	$P11NE_CLI start > /dev/null 2>&1
 
 	# Generate and use an secp384r1 EC key
 	openssl genrsa -out key.pem 2048 > /dev/null 2>&1
@@ -328,18 +302,10 @@ function test_token_ec_secp384r1_key {
 	out=$($P11NE_CLI describe-token --label $TOKEN_LABEL_SECP384R1_EC --pin $TOKEN_PIN)
 	echo "$out" | grep "\"Err\": \"TokenNotFound\"" > /dev/null || ERRORS="$ERRORS $ERROR_RELEASE"
 
-	# Stop the p11ne enclave
-	$P11NE_CLI stop > /dev/null 2>&1
-
 	if [[ -z $ERRORS ]]; then
 		echo "[PASS]"
 	else
 		echo "[FAIL]"
-	fi
-
-	# Re-enable the NE ACM service if it was active
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl start $NE_ACM_SERVICE
 	fi
 }
 
@@ -349,6 +315,7 @@ function test_cryptographic_capabilities {
 	# Stop an enclave if it is already running
 	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
 		sudo systemctl stop $NE_ACM_SERVICE
+		$P11NE_CLI stop > /dev/null 2>&1
 		sleep $SLEEP_AFTER_SERVICE_STOP
 	fi
 
@@ -368,24 +335,14 @@ function test_cryptographic_capabilities {
 
 	rm -f $TMP_CRYPTOGRAPHIC_TESTS_OUT
 
-	# Re-enable the NE ACM service if it was active
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl start $NE_ACM_SERVICE
-	fi
+	sudo systemctl restart $NE_ACM_SERVICE
+	sleep $SLEEP_AFTER_SERVICE_STOP
 }
 
 function test_al2_libp11 {
 	local out
 
 	echo -n "Testing AL2 libp11 .......... "
-
-	# Stop an enclave if it is already running
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl stop $NE_ACM_SERVICE
-		sleep $SLEEP_AFTER_SERVICE_STOP
-	fi
-
-	$P11NE_CLI start > /dev/null 2>&1
 
 	$P11NE_CLI init-token \
 		--key-db $KEY_DB \
@@ -405,11 +362,6 @@ function test_al2_libp11 {
 
 	# Release token
 	$P11NE_CLI release-token --label $TOKEN_LABEL_RSA --pin $TOKEN_PIN > /dev/null
-
-	# Re-enable the NE ACM service if it was active
-	if [[ $NE_ACM_SERVICE_RUNNING -eq 0 ]]; then
-		sudo systemctl start $NE_ACM_SERVICE
-	fi
 }
 
 function run_tests() {
@@ -420,10 +372,18 @@ function run_tests() {
 
 	configure_aux_tools
 
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 1 ]]; then
+		sudo systemctl restart $NE_ACM_SERVICE
+	fi
+
 	test_token_rsa_key
 	test_token_ec_secp384r1_key
 	test_cryptographic_capabilities
 	test_al2_libp11
+
+	if [[ $NE_ACM_SERVICE_RUNNING -eq 1 ]]; then
+		sudo systemctl stop $NE_ACM_SERVICE
+	fi
 
 	cd "$INIT_DIR" || return
 	rm -rf $TMP_TEST_DIR
