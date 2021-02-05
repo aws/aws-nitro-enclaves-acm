@@ -19,8 +19,8 @@ EVAULT_BIN_P11_MOD="libvtok_p11.so"
 DEFAULT_CPU_COUNT=2
 DEFAULT_MEM_MIB=256
 
-# TODO: make this user-configurable
-AWS_REGION=us-east-1
+# The region will be extracted from the vsock-proxy's configuration
+AWS_REGION=
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_SESSION_TOKEN=
@@ -126,6 +126,17 @@ p11ne_rpc_server_addr() {
     else
         echo "unix:$EVAULT_DEVENV_RPC_SOCK"
     fi
+}
+
+configure_aws_region() {
+    # The vsock-proxy service must be running.
+    systemctl is-active -q nitro-enclaves-vsock-proxy
+    ok_or_die "The nitro-enclaves-vsock-proxy is not running."
+
+    # Obtain the region we're running on based on the launched vsock-proxy's configiration
+    vsock_proxy_pid="$(systemctl show --property MainPID nitro-enclaves-vsock-proxy | cut -d'=' -f2)"
+    kms_endpoint="$(cat /proc/$vsock_proxy_pid/cmdline | sed -e "s/\x00/ /g" | cut -d' ' -f3)"
+    AWS_REGION="$(echo $kms_endpoint | cut -d'.' -f2)"
 }
 
 # Ensure the p11ne image is present
@@ -346,6 +357,7 @@ execute_rpc() {
 # Initialize a token
 #
 cmd_init-token() {
+    configure_aws_region
     ensure_aws_creds
 
     local key_db=
@@ -397,6 +409,7 @@ cmd_init-token() {
 # Refresh a token
 #
 cmd_refresh-token() {
+    configure_aws_region
     ensure_aws_creds
 
     local label=
