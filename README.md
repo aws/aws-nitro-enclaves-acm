@@ -86,7 +86,7 @@ See `devtool help` for more build options.
 
 `devtool` uses development containers to simulate both the enclave and
 parent instance environments. The communication channel between `p11-kit
-client` and `p11-kit server` is emulated via an Unix socket, bind-mounted into
+client` and `p11-kit server` is emulated via a Unix socket, bind-mounted into
 both container environments (parent and enclave).
 
 **Note**: The emulated enclave environment differs substantially from the
@@ -112,10 +112,10 @@ tools/devtool simulate-parent
 ```
 
 This will spin up a container with p11-kit configured to access the remote
-module exposed by the enclave container via an Unix socket.
+module exposed by the enclave container via a Unix socket.
 `devtool runparent` starts a BASH shell, so the user can manually test /
 inspect the functionality of the ACM for Nitro Enclaves module; for instance, via
-running `openssl` manually, directed to use the PKCS#11 engine and an URI
+running `openssl` manually, directed to use the PKCS#11 engine and a URI
 pointing to the pkcs#11 provider module token:
 
 ```bash
@@ -126,7 +126,7 @@ openssl pkeyutl -keyform engine -engine pkcs11 -sign -inkey \
 
 The `tests` directory contains integration tests that can be executed to
 validate the PKCS#11 module functionality using openssl or OpenSC pkcs11-tool.
-Tests can be executer via:
+Tests can be executed via:
 ```bash
 ./tests/testtool openssl
 ```
