@@ -123,17 +123,45 @@ struct ImdsCache {
 
 impl ImdsCache {
     fn new() -> Result<Self, Error> {
+        let token = Self::get_session_token()?;
+
         Ok(Self {
-            partition: Self::fetch_partition()?,
-            region: Self::fetch_region()?,
-            role_arn: Self::fetch_role_arn()?,
-            creds: Self::fetch_creds()?,
+            partition: Self::fetch_partition(&token)?,
+            region: Self::fetch_region(&token)?,
+            role_arn: Self::fetch_role_arn(&token)?,
+            creds: Self::fetch_creds(&token)?,
         })
     }
 
-    fn fetch(key: &str) -> Result<String, Error> {
-        let url = format!("http://169.254.169.254{}", key);
+    fn get_session_token() -> Result<String, Error> {
+        let args = [
+            "-X",
+            "PUT",
+            "http://169.254.169.254/latest/api/token",
+            "-H",
+            "X-aws-ec2-metadata-token-ttl-seconds: 600",
+        ];
+
         let output = Command::new("curl")
+            .args(&args)
+            .output()
+            .map_err(Error::IoError)?;
+
+        if !output.status.success() {
+            return Err(Error::ProcessError(
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+        String::from_utf8(output.stdout).map_err(Error::Utf8Error)
+    }
+
+    fn fetch(key: &str, token: &str) -> Result<String, Error> {
+        let url = format!("http://169.254.169.254{}", key);
+        let header = format!("X-aws-ec2-metadata-token: {}", token);
+        let output = Command::new("curl")
+            .arg("-H")
+            .arg(header)
             .arg("-fs")
             .arg(url)
             .output()
@@ -147,20 +175,20 @@ impl ImdsCache {
         String::from_utf8(output.stdout).map_err(Error::Utf8Error)
     }
 
-    fn fetch_partition() -> Result<String, Error> {
-        Self::fetch("/latest/meta-data/services/partition")
+    fn fetch_partition(token: &str) -> Result<String, Error> {
+        Self::fetch("/latest/meta-data/services/partition", token)
     }
 
-    fn fetch_region() -> Result<String, Error> {
-        Self::fetch("/latest/meta-data/placement/region")
+    fn fetch_region(token: &str) -> Result<String, Error> {
+        Self::fetch("/latest/meta-data/placement/region", token)
     }
 
-    fn fetch_role_name() -> Result<String, Error> {
-        Self::fetch("/latest/meta-data/iam/security-credentials")
+    fn fetch_role_name(token: &str) -> Result<String, Error> {
+        Self::fetch("/latest/meta-data/iam/security-credentials", token)
     }
 
-    fn fetch_role_arn() -> Result<String, Error> {
-        let role_name = Self::fetch_role_name()?;
+    fn fetch_role_arn(token: &str) -> Result<String, Error> {
+        let role_name = Self::fetch_role_name(token)?;
 
         let output = Command::new("aws")
             .arg("iam")
@@ -175,7 +203,7 @@ impl ImdsCache {
             warn!("Cannot fetch IAM role arn using the AWS CLI iam get-role command. Falling back to using IMDS.");
             warn!("For IAM roles with paths included, please add the IAM policy permission for iam:GetRole as per documentation - https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-refapp.html.");
             let profile_arn =
-                serde_json::from_str::<IamInfo>(&Self::fetch("/latest/meta-data/iam/info")?)
+                serde_json::from_str::<IamInfo>(&Self::fetch("/latest/meta-data/iam/info", token)?)
                     .and_then(|info| Ok(info.instance_profile_arn))
                     .map_err(Error::ParseError)?;
 
@@ -198,13 +226,14 @@ impl ImdsCache {
         Ok(iam_role_info.role.arn)
     }
 
-    fn fetch_creds() -> Result<SecurityCredentials, Error> {
+    fn fetch_creds(token: &str) -> Result<SecurityCredentials, Error> {
         let creds_str = Self::fetch(
             format!(
                 "/latest/meta-data/iam/security-credentials/{}",
-                Self::fetch_role_name()?
+                Self::fetch_role_name(token)?
             )
             .as_str(),
+            token,
         )?;
         serde_json::from_str(creds_str.as_str()).map_err(Error::ParseError)
     }
