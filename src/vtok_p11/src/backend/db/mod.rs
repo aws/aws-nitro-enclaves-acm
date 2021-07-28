@@ -40,6 +40,13 @@ pub struct EcKeyInfo {
     pub point_q_x962: Vec<u8>,
 }
 
+#[derive(Clone)]
+pub struct CertInfo {
+    pub pem: String,
+    pub id: pkcs11::CK_BYTE,
+    pub label: String,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
     GeneralError,
@@ -90,6 +97,15 @@ impl Db {
                     objects.push(Object::new_ec_private_key(info.clone()));
                     objects.push(Object::new_ec_public_key(info));
                 }
+            }
+
+            if key_config.cert_pem.is_some() {
+                let cert = CertInfo {
+                    id: key_config.id,
+                    label: key_config.label.clone(),
+                    pem: key_config.cert_pem.clone().ok_or(Error::GeneralError)?,
+                };
+                objects.push(Object::new_trusted_cert(cert));
             }
         }
 

@@ -317,6 +317,7 @@ where
                 encrypted_pem_b64: key.encrypted_pem_b64,
                 id: key.id,
                 label: key.label,
+                cert_pem: key.cert_pem,
             })
         }
         Ok(private_keys)
