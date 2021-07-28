@@ -9,7 +9,7 @@ use crate::pkcs11;
 use crate::util::{CkRawAttrTemplate, Error as UtilError};
 use crate::{Error, Result};
 
-use super::{EcKeyInfo, RsaKeyInfo};
+use super::{EcKeyInfo, RsaKeyInfo, CertInfo};
 
 /// Object and object attribute handling logic. See the PKCS#11
 /// Section 4 on objects for more details on how these attributes
@@ -131,6 +131,7 @@ pub enum ObjectKind {
     RsaPublicKey(String),
     EcPrivateKey(String),
     EcPublicKey(String),
+    Certificate(String),
     Mechanism(Mechanism),
 }
 
@@ -279,6 +280,26 @@ impl Object {
         attrs.insert(pkcs11::CKA_EC_POINT, Attr::Bytes(info.point_q_x962));
         Self {
             kind: ObjectKind::EcPublicKey(info.priv_pem),
+            attrs,
+        }
+    }
+
+    pub fn new_trusted_cert(info: CertInfo) -> Self {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            pkcs11::CKA_CLASS,
+            Attr::from_ck_object_class(pkcs11::CKO_CERTIFICATE),
+        );
+        attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
+        attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
+        attrs.insert(pkcs11::CKA_PRIVATE, Attr::CK_FALSE);
+        attrs.insert(pkcs11::CKA_SENSITIVE, Attr::CK_FALSE);
+        attrs.insert(pkcs11::CKA_EXTRACTABLE, Attr::CK_TRUE);
+        attrs.insert(pkcs11::CKA_LOCAL, Attr::CK_FALSE);
+        attrs.insert(pkcs11::CKA_TOKEN, Attr::CK_TRUE);
+        attrs.insert(pkcs11::CKA_TRUSTED, Attr::CK_TRUE);
+        Self {
+            kind: ObjectKind::Certificate(info.pem),
             attrs,
         }
     }

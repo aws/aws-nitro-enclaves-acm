@@ -17,6 +17,7 @@ Commands:
     --id            <private-key id>
     --label         <private-key label>
     --key-file      <input PEM file>
+    [--cert-file]   <input certificate PEM file>
     --out-file      <output file>
     --kms-key-id    <id of the KMS CMK key used to encrypt the private key>
     --kms-region    <region of the KMS CMK key>
@@ -26,7 +27,9 @@ Commands:
 # Database format converter
 cmd_pack-key() {
 
-    if [ "$#" -ne 12 ]; then
+    local nargs="$#";
+
+    if [ $nargs -ne 12 -a $nargs -ne 14 ]; then
         die "Invalid arguments. Please use \`$0 help\` for help."
     fi
 
@@ -35,6 +38,7 @@ cmd_pack-key() {
             --id) id="$2"; shift ;;
             --label) label="$2"; shift ;;
             --key-file) key_file="$2"; shift ;;
+            --cert-file) cert_file="$2"; shift ;;
             --out-file) out_file="$2"; shift ;;
             --kms-key-id) key_id="$2"; shift ;;
             --kms-region) region="$2"; shift ;;
@@ -42,6 +46,10 @@ cmd_pack-key() {
         esac
         shift
     done
+
+    if [ $nargs -eq 12 -a -n "$cert_file" ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
 
     # The key file
     if [ ! -f "$key_file" ]; then
@@ -61,12 +69,19 @@ cmd_pack-key() {
     enc_key=$(aws kms encrypt --key-id $key_id --plaintext "$key" --region $region --query CiphertextBlob --output text)
     ok_or_die "Failed to encrypt the key"
 
+    # Read the cert (optional)
+    local cert
+    if [ -n "$cert_file" -a -f "$cert_file" ]; then
+        cert=$(<"$cert_file")
+    fi
+
     local out_data
     out_data=$( jq -Rn \
             --arg a "$enc_key" \
             --arg b "$id" \
             --arg c "$label" \
-            '[{encrypted_pem_b64: $a, id: $b | tonumber, label: $c}]' )
+            --arg d "$cert"
+            '[{encrypted_pem_b64: $a, id: $b | tonumber, label: $c, cert_pem: $d}] | with_entries( select( .value != "" ) ) ')
     ok_or_die "Cannot format the input key."
 
     echo "$out_data" > "$out_file.db"

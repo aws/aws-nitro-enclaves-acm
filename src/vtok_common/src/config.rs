@@ -21,6 +21,7 @@ pub struct PrivateKey {
     pub encrypted_pem_b64: String,
     pub id: u8,
     pub label: String,
+    pub cert_pem: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]

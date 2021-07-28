@@ -106,6 +106,7 @@ impl DbSource {
                 id: 1,
                 label: "acm-key".to_string(),
                 encrypted_pem_b64: db.encrypted_private_key.clone(),
+                cert_pem: Some(self.cert_pem().unwrap().to_string()),
             }],
             Self::File { db, .. } => db.as_slice().to_vec(),
         }
