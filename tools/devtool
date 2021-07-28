@@ -568,8 +568,8 @@ cmd_simulate-parent() {
     ok_or_die "Build failed."
 
     local ctr_id=$(get_running_container_id "$ENCLAVE_CTR")
-    if [[ -n $ctr_id ]]; then
-        say_warn "Enclave container is not runing. Use \`$0 simulate-enclave\` to start it."
+    if [[ -z $ctr_id ]]; then
+        say_warn "Enclave container is not running. Use \`$0 simulate-enclave\` to start it."
     fi
 
     docker run --rm -it \
