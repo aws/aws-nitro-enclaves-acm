@@ -113,7 +113,7 @@ tools/devtool simulate-parent
 
 This will spin up a container with p11-kit configured to access the remote
 module exposed by the enclave container via a Unix socket.
-`devtool runparent` starts a BASH shell, so the user can manually test /
+`devtool simulate-parent` starts a BASH shell, so the user can manually test /
 inspect the functionality of the ACM for Nitro Enclaves module; for instance, via
 running `openssl` manually, directed to use the PKCS#11 engine and a URI
 pointing to the pkcs#11 provider module token:
