@@ -103,7 +103,7 @@ impl Db {
                 let cert = CertInfo {
                     id: key_config.id,
                     label: key_config.label.clone(),
-                    pem: key_config.cert_pem.clone().unwrap(),
+                    pem: key_config.cert_pem.clone().ok_or(Error::GeneralError)?,
                 };
                 objects.push(Object::new_trusted_cert(cert));
             }
