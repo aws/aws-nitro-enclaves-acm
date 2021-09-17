@@ -99,7 +99,7 @@ impl Db {
                 }
             }
 
-            if !key_config.cert_pem.is_none() {
+            if key_config.cert_pem.is_some() {
                 let cert = CertInfo {
                     id: key_config.id,
                     label: key_config.label.clone(),
