@@ -158,11 +158,18 @@ ensure_nitro_cli() {
 #
 ensure_aws_creds() {
     local role
-    role=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/)
+    TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+    ok_or_die "Error: p11ne could not fetch IMDSv2 session token"
+    [[ -z $TOKEN ]] && die "Error: invalid IMDSv2 session token"
+
+    curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/
+    ok_or_die "Error: p11ne could not fetch the IMDS meta-data"
+
+    role=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/)
     ok_or_die "Unable to get the IAM info for this instance role." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
     local creds_json
-    creds_json=$(curl -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role")
+    creds_json=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role")
     ok_or_die "Unable to find instance role credentials." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
     AWS_ACCESS_KEY_ID=$(echo "$creds_json" | jq -er ".AccessKeyId")
