@@ -85,6 +85,7 @@ die() {
 #
 ok_or_die() {
     local code=$?
+    [[-f log.err]] && cat log.err 1>&2 && rm -rf log.err
     [[ $code -eq 0 ]] || die -c $code "$@"
 }
 
@@ -158,26 +159,30 @@ ensure_nitro_cli() {
 #
 ensure_aws_creds() {
     local role
-    TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+    TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2> ./log.err`
     ok_or_die "Error: p11ne could not fetch IMDSv2 session token"
     [[ -z $TOKEN ]] && die "Error: invalid IMDSv2 session token"
 
-    curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/
+    curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/ 2> ./log.err
     ok_or_die "Error: p11ne could not fetch the IMDS meta-data"
 
-    role=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/)
+    role=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/ 2> ./log.err)
     ok_or_die "Unable to get the IAM info for this instance role." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
+    
     local creds_json
-    creds_json=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role")
+    creds_json=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -fs http://169.254.169.254/latest/meta-data/iam/security-credentials/"$role" 2> ./log.err)
     ok_or_die "Unable to find instance role credentials." \
         "Please make sure you are running $MY_NAME on an EC2 instance with the correct IAM role assigned."
+    
     AWS_ACCESS_KEY_ID=$(echo "$creds_json" | jq -er ".AccessKeyId")
     ok_or_die "Unable to parse instance role credentials."
     AWS_SECRET_ACCESS_KEY=$(echo "$creds_json" | jq -er ".SecretAccessKey")
     ok_or_die "Unable to parse instance role credentials."
     AWS_SESSION_TOKEN=$(echo "$creds_json" | jq -er ".Token")
     ok_or_die "Unable to parse instance role credentials."
+
+    rm -rf ./log.err
 }
 
 ensure_vsock_proxy() {
