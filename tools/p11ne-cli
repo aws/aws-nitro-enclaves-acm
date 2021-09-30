@@ -85,7 +85,7 @@ die() {
 #
 ok_or_die() {
     local code=$?
-    [[-f log.err]] && cat log.err 1>&2 && rm -rf log.err
+    [[ -f log.err ]] && cat log.err 1>&2 && rm -rf log.err
     [[ $code -eq 0 ]] || die -c $code "$@"
 }
 
