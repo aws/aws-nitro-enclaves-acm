@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 extern crate libc;
@@ -30,7 +30,6 @@ enum Error {
     ConfigError(config::Error),
     IoError(std::io::Error),
     UsageError,
-    InitRandError,
     WorkerError(worker::Error),
 }
 
@@ -49,7 +48,6 @@ impl fmt::Display for Error {
             Self::ConfigError(e) => write!(f, "{:?}", e),
             Self::IoError(e) => write!(f, "{:?}", e),
             Self::UsageError => write!(f, "{}", USAGE),
-            Self::InitRandError => write!(f, "[p11ne] Cannot initialize RNG"),
             Self::WorkerError(e) => write!(f, "{:?}", e),
         }
     }
