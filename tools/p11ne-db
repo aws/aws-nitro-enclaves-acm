@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 MY_VERSION="1.1"
@@ -80,8 +80,8 @@ cmd_pack-key() {
             --arg a "$enc_key" \
             --arg b "$id" \
             --arg c "$label" \
-            --arg d "$cert"
-            '[{encrypted_pem_b64: $a, id: $b | tonumber, label: $c, cert_pem: $d}] | with_entries( select( .value != "" ) ) ')
+            --arg d "$cert" \
+	     '[{encrypted_pem_b64: $a, id: $b | tonumber, label: $c, cert_pem: $d}] | del(.[][] | select(. == ""))')
     ok_or_die "Cannot format the input key."
 
     echo "$out_data" > "$out_file.db"
