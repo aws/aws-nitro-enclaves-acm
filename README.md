@@ -145,11 +145,13 @@ Tests can be executed via:
 ```
 The above test suite is also applicable when using real enclaves.
 
-## Security
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
 ## License
 
 This project is licensed under the Apache-2.0 License.
 
+## Security issue notifications
+
+If you discover a potential security issue in ACM for Nitro Enclaves, we ask that you notify AWS
+Security via our
+[vulnerability reporting page](https://aws.amazon.com/security/vulnerability-reporting/).
+Please do **not** create a public GitHub issue.
