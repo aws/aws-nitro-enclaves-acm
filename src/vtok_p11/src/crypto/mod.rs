@@ -1,8 +1,9 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::pkcs11;
 
+pub mod cert;
 pub mod decrypt;
 pub mod digest;
 pub mod encrypt;
@@ -11,6 +12,7 @@ pub mod key;
 pub mod sign;
 pub mod verify;
 
+pub use cert::{CertCategory, X509Chain, X509};
 pub use decrypt::{DecryptCtx, DirectDecryptCtx};
 pub use digest::DigestCtx;
 pub use encrypt::{DirectEncryptCtx, EncryptCtx};
@@ -56,6 +58,13 @@ pub enum Error {
     Encrypt,
     BadKeyType,
     UnknownKeyType,
+    CertBadPem,
+    CertName,
+    CertIssuer,
+    CertSerialNo,
+    CertDerEncode,
+    CertChainErr,
+    CertChainInvalid,
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -154,12 +163,42 @@ impl FfiFree for ffi::EC_POINT {
     }
 }
 
+impl FfiFree for ffi::X509 {
+    fn free(&mut self) {
+        unsafe {
+            trace!("calling X509_free");
+            ffi::X509_free(self as *mut ffi::X509);
+        }
+    }
+}
+
+impl FfiFree for ffi::X509_STORE {
+    fn free(&mut self) {
+        unsafe {
+            trace!("calling X509_STORE_free");
+            ffi::X509_STORE_free(self as *mut ffi::X509_STORE);
+        }
+    }
+}
+
+impl FfiFree for ffi::X509_STORE_CTX {
+    fn free(&mut self) {
+        unsafe {
+            trace!("calling X509_STORE_CTX_free");
+            ffi::X509_STORE_CTX_free(self as *mut ffi::X509_STORE_CTX);
+        }
+    }
+}
+
 struct FfiBox<T: FfiFree> {
     ptr: *mut T,
 }
 unsafe impl std::marker::Send for FfiBox<ffi::EVP_MD_CTX> {}
 unsafe impl std::marker::Send for FfiBox<ffi::EVP_PKEY> {}
 unsafe impl std::marker::Send for FfiBox<ffi::EVP_PKEY_CTX> {}
+unsafe impl std::marker::Send for FfiBox<ffi::X509> {}
+unsafe impl std::marker::Send for FfiBox<ffi::X509_STORE> {}
+unsafe impl std::marker::Send for FfiBox<ffi::X509_STORE_CTX> {}
 
 impl<T> FfiBox<T>
 where

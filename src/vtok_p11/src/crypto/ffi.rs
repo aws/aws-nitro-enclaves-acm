@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 #![allow(non_snake_case)]
@@ -24,6 +24,10 @@ pub const RSA_PKCS1_PSS_PADDING: c_int = 6;
 pub const EVP_PKEY_RSA: c_int = 6;
 pub const EVP_PKEY_EC: c_int = 408;
 
+/// X509 verification purpose flag
+pub const X509_V_FLAG_X509_STRICT: c_ulong = 0;
+pub const X509_PURPOSE_ANY: c_int = 7;
+
 /// Opaque cryptographic objects
 #[repr(C)]
 pub struct BIGNUM {
@@ -31,6 +35,10 @@ pub struct BIGNUM {
 }
 #[repr(C)]
 pub struct BIO {
+    _ph: [u8; 0],
+}
+#[repr(C)]
+pub struct BIO_METHOD {
     _ph: [u8; 0],
 }
 #[repr(C)]
@@ -77,6 +85,26 @@ pub struct BN_CTX {
 pub struct ECDSA_SIG {
     _ph: [u8; 0],
 }
+#[repr(C)]
+pub struct X509 {
+    _ph: [u8; 0],
+}
+#[repr(C)]
+pub struct X509_NAME {
+    _ph: [u8; 0],
+}
+#[repr(C)]
+pub struct X509_STORE {
+    _ph: [u8; 0],
+}
+#[repr(C)]
+pub struct X509_STORE_CTX {
+    _ph: [u8; 0],
+}
+#[repr(C)]
+pub struct ASN1_INTEGER {
+    _ph: [u8; 0],
+}
 
 /// Transparent cryptographic objects
 #[repr(C)]
@@ -120,7 +148,19 @@ extern "C" {
     /// Private key utility functions (i.e. from PEM)
     pub fn BIO_new_mem_buf(buf: *const c_void, len: c_int) -> *mut BIO;
 
+    pub fn BIO_s_mem() -> *const BIO_METHOD;
+
+    pub fn BIO_new(method: *const BIO_METHOD) -> *mut BIO;
+
     pub fn BIO_free(bio: *mut BIO) -> c_int;
+
+    pub fn BIO_eof(bio: *mut BIO) -> c_int;
+
+    pub fn BIO_mem_contents(
+        bio: *const BIO,
+        out_contents: *const *const u8,
+        out_len: *mut c_size_t,
+    ) -> c_int;
 
     pub fn PEM_read_bio_PrivateKey(
         bp: *mut BIO,
@@ -312,4 +352,39 @@ extern "C" {
     pub fn BN_CTX_new() -> *mut BN_CTX;
     pub fn BN_CTX_free(ctx: *mut BN_CTX);
     pub fn BN_free(bn: *mut BIGNUM);
+
+    /// Imported X509 certificate functions
+    pub fn PEM_read_bio_X509(
+        bp: *mut BIO,
+        x: *mut *mut X509,
+        c: *const c_void,
+        u: *mut c_void,
+    ) -> *mut X509;
+    pub fn X509_get_subject_name(x: *const X509) -> *mut X509_NAME;
+    pub fn X509_get_issuer_name(x: *const X509) -> *mut X509_NAME;
+    pub fn X509_NAME_get0_der(
+        nm: *mut X509_NAME,
+        pder: *const *const c_uchar,
+        pderlen: *mut c_size_t,
+    ) -> c_int;
+    pub fn X509_get0_serialNumber(x: *const X509) -> *const ASN1_INTEGER;
+    pub fn ASN1_INTEGER_to_BN(ai: *const ASN1_INTEGER, bn: *mut BIGNUM) -> *mut BIGNUM;
+    pub fn i2d_X509_bio(bp: *mut BIO, x: *const X509) -> c_int;
+    pub fn X509_free(cert: *mut X509);
+    pub fn X509_STORE_new() -> *mut X509_STORE;
+    pub fn X509_STORE_free(cert: *mut X509_STORE);
+    pub fn X509_STORE_CTX_new() -> *mut X509_STORE_CTX;
+    pub fn X509_STORE_CTX_init(
+        ctx: *mut X509_STORE_CTX,
+        store: *mut X509_STORE,
+        x509: *const X509,
+        chain: *mut c_void, /* STACK_OF(X509) */
+    ) -> c_int;
+    pub fn X509_STORE_CTX_cleanup(ctx: *mut X509_STORE_CTX);
+    pub fn X509_STORE_CTX_free(store: *mut X509_STORE_CTX);
+    pub fn X509_STORE_add_cert(store: *mut X509_STORE, x509: *const X509) -> c_int;
+    pub fn X509_STORE_set_flags(store: *mut X509_STORE, flags: c_ulong) -> c_int;
+    pub fn X509_STORE_CTX_set_purpose(ctx: *mut X509_STORE_CTX, purpose: c_int) -> c_int;
+    pub fn X509_verify_cert(ctx: *mut X509_STORE_CTX) -> c_int;
+    pub fn X509_verify(cert: *const X509, pkey: *const EVP_PKEY) -> c_int;
 }
