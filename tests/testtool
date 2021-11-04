@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # Test tool. Used for smoke-testing an p11ne enclave.
@@ -29,8 +29,10 @@ PIN="1234"
 KEYID="%01"
 TOKEN_LABEL="test-token"
 URI_TOKEN="pkcs11:model=p11ne-token;manufacturer=Amazon;serial=EVT00;token=$TOKEN_LABEL;pin-value=$PIN;id=$KEYID"
+URI_CERT="object=acm-ne-cert-0;type=cert"
 KEYS_DIR="./tests/keys/"
 KEY_DB_DIR="tests/db"
+CERTS_DIR="./tests/certs/"
 RSA_KEYS="rsa1024 rsa2048 rsa4096"
 ECDSA_KEYS="secp384r1 secp521r1 prime256v1"
 
@@ -105,6 +107,16 @@ get_key_file() {
     local keylabel="$1"
     local keytype="$2" # public/private
     echo "$KEYS_DIR/${keylabel}_${keytype}key.pem"
+}
+
+get_cert_file() {
+	certlabel="$1"
+	echo "$CERTS_DIR/${certlabel}_cert.pem"
+}
+
+get_cert_file_key() {
+	local keylabel="$1"
+	echo "$CERTS_DIR/${keylabel}_key.pem"
 }
 
 get_key_pkcs_uri() {
@@ -756,6 +768,32 @@ provision_key() {
     return 0
 }
 
+# Provision test token with test key with certificate attached
+provision_key_w_cert() {
+	if [ "$#" -ne 6 ]; then
+        die "Invalid arguments. Please use \`$0 help\` for help."
+    fi
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --kms-key-id) key_id="$2"; shift ;;
+            --kms-region) region="$2"; shift ;;
+            --key-label) keylabel="$2"; shift;;
+            *) cmd_help; die "Invalid argument: $1. Please use \`$0 help\` for help.";;
+        esac
+        shift
+    done
+
+	 # Initialize a token with one key type
+    p11ne-db pack-key --id 1 --label testkey --key-file "$(get_cert_file_key "$keylabel")" --cert-file "$(get_cert_file "$keylabel")" \
+				--out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
+    ok_or_die "Cannot pack p11ne token test key."
+
+    p11ne-cli init-token --key-db "$KEY_DB_DIR/$keylabel.db" --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
+
+    return 0
+}
+
 # Release test token
 cleanup_key() {
     if [ "$#" -ne 2 ]; then
@@ -855,6 +893,35 @@ cmd_openssl() {
 
         cleanup_key --key-label "$rsa_key"
     done
+
+    # If p11tool is installed, export the certificate
+    # Also keytool can be used
+    if yum list installed gnutls-utils > /dev/null 2>&1; then
+        echo "Running X509 certificate provisioning and export tests"
+
+        echo "test_x509_single_cert"
+        provision_key_w_cert --kms-key-id "$key_id" --kms-region "$region" --key-label "selfsigned"
+        p11tool --export "$URI_TOKEN;$URI_CERT" > /dev/null 2>&1
+        log_test_result "test_x509_single_cert" $?
+        cleanup_key --key-label "selfsigned"
+
+        echo "test_x509_valid_chain"
+        provision_key_w_cert --kms-key-id "$key_id" --kms-region "$region" --key-label "valid_chain"
+        p11tool --export "$URI_TOKEN;$URI_CERT" > /dev/null 2>&1
+        log_test_result "test_x509_valid_chain" $?
+        cleanup_key --key-label "valid_chain"
+
+        echo "test_x509_invalid_chain"
+        provision_key_w_cert --kms-key-id "$key_id" --kms-region "$region" --key-label "invalid_chain"
+        p11tool --export "$URI_TOKEN;$URI_CERT" > /dev/null 2>&1
+        # Negative test
+        if [ $? -ne 0 ]; then
+            log_test_result "test_x509_invalid_chain" 0
+        else
+            log_test_result "test_x509_invalid_chain" $?
+        fi
+        cleanup_key --key-label "invalid_chain"
+    fi
 
     cleanup_test_env
 }
