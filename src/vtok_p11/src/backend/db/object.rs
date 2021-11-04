@@ -1,15 +1,15 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::HashMap;
 use std::mem::size_of;
 
+use super::{CertInfo, EcKeyInfo, RsaKeyInfo};
 use crate::backend::Mechanism;
+use crate::crypto;
 use crate::pkcs11;
 use crate::util::{CkRawAttrTemplate, Error as UtilError};
 use crate::{Error, Result};
-
-use super::{EcKeyInfo, RsaKeyInfo, CertInfo};
 
 /// Object and object attribute handling logic. See the PKCS#11
 /// Section 4 on objects for more details on how these attributes
@@ -57,6 +57,8 @@ pub enum Attr {
     CkBbool([u8; size_of::<pkcs11::CK_BBOOL>()]),
     CkByte([u8; size_of::<pkcs11::CK_BYTE>()]),
     CkKeyType([u8; size_of::<pkcs11::CK_KEY_TYPE>()]),
+    CkCertType([u8; size_of::<pkcs11::CK_CERTIFICATE_TYPE>()]),
+    CkCertCategory([u8; size_of::<pkcs11::CK_CERTIFICATE_CATEGORY>()]),
     CkMechanismType([u8; size_of::<pkcs11::CK_MECHANISM_TYPE>()]),
     CkObjectClass([u8; size_of::<pkcs11::CK_OBJECT_CLASS>()]),
     CkUlong([u8; size_of::<pkcs11::CK_ULONG>()]),
@@ -72,6 +74,8 @@ impl Attr {
             Self::CkBbool(v) => v.len(),
             Self::CkByte(v) => v.len(),
             Self::CkKeyType(v) => v.len(),
+            Self::CkCertType(v) => v.len(),
+            Self::CkCertCategory(v) => v.len(),
             Self::CkMechanismType(v) => v.len(),
             Self::CkObjectClass(v) => v.len(),
             Self::CkUlong(v) => v.len(),
@@ -85,6 +89,8 @@ impl Attr {
             Self::CkBbool(v) => v,
             Self::CkByte(v) => v,
             Self::CkKeyType(v) => v,
+            Self::CkCertType(v) => v,
+            Self::CkCertCategory(v) => v,
             Self::CkMechanismType(v) => v,
             Self::CkObjectClass(v) => v,
             Self::CkUlong(v) => v,
@@ -101,6 +107,15 @@ impl Attr {
     fn from_ck_key_type(src: pkcs11::CK_KEY_TYPE) -> Self {
         #[cfg(target_endian = "little")]
         Self::CkKeyType(src.to_le_bytes())
+    }
+
+    fn from_ck_cert_type(src: pkcs11::CK_CERTIFICATE_TYPE) -> Self {
+        #[cfg(target_endian = "little")]
+        Self::CkCertType(src.to_le_bytes())
+    }
+    fn from_ck_cert_category(src: pkcs11::CK_CERTIFICATE_CATEGORY) -> Self {
+        #[cfg(target_endian = "little")]
+        Self::CkCertCategory(src.to_le_bytes())
     }
 
     fn from_ck_mechanism_type(src: pkcs11::CK_MECHANISM_TYPE) -> Self {
@@ -131,7 +146,7 @@ pub enum ObjectKind {
     RsaPublicKey(String),
     EcPrivateKey(String),
     EcPublicKey(String),
-    Certificate(String),
+    Certificate,
     Mechanism(Mechanism),
 }
 
@@ -284,22 +299,41 @@ impl Object {
         }
     }
 
-    pub fn new_trusted_cert(info: CertInfo) -> Self {
+    pub fn new_x509_cert(info: CertInfo) -> Self {
         let mut attrs = HashMap::new();
         attrs.insert(
             pkcs11::CKA_CLASS,
             Attr::from_ck_object_class(pkcs11::CKO_CERTIFICATE),
         );
+        attrs.insert(
+            pkcs11::CKA_CERTIFICATE_TYPE,
+            Attr::from_ck_cert_type(pkcs11::CKC_X_509),
+        );
+        let categ = match info.categ {
+            crypto::CertCategory::Unverified => pkcs11::CK_CERTIFICATE_CATEGORY_UNSPECIFIED,
+            crypto::CertCategory::Token => pkcs11::CK_CERTIFICATE_CATEGORY_TOKEN_USER,
+            crypto::CertCategory::Authority => pkcs11::CK_CERTIFICATE_CATEGORY_AUTHORITY,
+            crypto::CertCategory::Other => pkcs11::CK_CERTIFICATE_CATEGORY_OTHER_ENTITY,
+        };
+        attrs.insert(
+            pkcs11::CKA_CERTIFICATE_CATEGORY,
+            Attr::from_ck_cert_category(categ),
+        );
         attrs.insert(pkcs11::CKA_ID, Attr::from_ck_byte(info.id));
         attrs.insert(pkcs11::CKA_LABEL, Attr::Bytes(info.label.into()));
-        attrs.insert(pkcs11::CKA_PRIVATE, Attr::CK_FALSE);
+        attrs.insert(pkcs11::CKA_TOKEN, Attr::CK_TRUE);
         attrs.insert(pkcs11::CKA_SENSITIVE, Attr::CK_FALSE);
         attrs.insert(pkcs11::CKA_EXTRACTABLE, Attr::CK_TRUE);
-        attrs.insert(pkcs11::CKA_LOCAL, Attr::CK_FALSE);
-        attrs.insert(pkcs11::CKA_TOKEN, Attr::CK_TRUE);
         attrs.insert(pkcs11::CKA_TRUSTED, Attr::CK_TRUE);
+        attrs.insert(pkcs11::CKA_SUBJECT, Attr::Bytes(info.subject_der.into()));
+        attrs.insert(pkcs11::CKA_ISSUER, Attr::Bytes(info.issuer_der.into()));
+        attrs.insert(
+            pkcs11::CKA_SERIAL_NUMBER,
+            Attr::Bytes(info.serno_der.into()),
+        );
+        attrs.insert(pkcs11::CKA_VALUE, Attr::Bytes(info.cert_der.into()));
         Self {
-            kind: ObjectKind::Certificate(info.pem),
+            kind: ObjectKind::Certificate,
             attrs,
         }
     }

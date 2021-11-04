@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fs::OpenOptions;
@@ -102,12 +102,19 @@ impl DbSource {
 
     pub fn to_schema_keys(&self) -> Vec<schema::PrivateKey> {
         match self {
-            Self::Acm { db, .. } => vec![schema::PrivateKey {
-                id: 1,
-                label: "acm-key".to_string(),
-                encrypted_pem_b64: db.encrypted_private_key.clone(),
-                cert_pem: Some(self.cert_pem().unwrap().to_string()),
-            }],
+            Self::Acm { db, .. } => {
+                let optcerts = self.cert_pem().map(|c| {
+                    let mut cc = c.to_string();
+                    self.cert_chain_pem().map(|ch| cc.push_str(ch));
+                    cc
+                });
+                vec![schema::PrivateKey {
+                    id: 1,
+                    label: "acm-key".to_string(),
+                    encrypted_pem_b64: db.encrypted_private_key.clone(),
+                    cert_pem: optcerts,
+                }]
+            }
             Self::File { db, .. } => db.as_slice().to_vec(),
         }
     }
