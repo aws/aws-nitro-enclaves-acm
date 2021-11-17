@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::pkcs11;
@@ -232,7 +232,7 @@ fn bignum_to_vec(bn: *const ffi::BIGNUM) -> Result<Vec<u8>> {
     }
     let mut ret = vec![0u8; len as usize];
 
-    let written = unsafe { ffi::BN_bn2bin(bn, ret.as_mut_ptr() as *mut i8) };
+    let written = unsafe { ffi::BN_bn2bin(bn, ret.as_mut_ptr() as *mut _) };
     if ret.len() != written as usize {
         return Err(Error::GeneralError);
     }
