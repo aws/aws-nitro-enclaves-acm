@@ -1,19 +1,13 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::process::Command;
 
 /// The p11ne enclave init
 /// Spawns the p11ne enclave main applications
-/// - the random seeder
 /// - the provisioning/rpc server
 /// - the p11-kit server
 fn main() {
-    Command::new("p11ne-rand")
-        .spawn()
-        .expect("random generator failed to start.")
-        .wait()
-        .expect("random generator exited with error.");
     Command::new("p11-kit")
         .args(&[
             "server",
