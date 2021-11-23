@@ -26,7 +26,6 @@ CTR_HOME="$([[ $(id -u) -eq 0 ]] && echo "/root" || echo "/home/$(whoami)")"
 EVBIN_AGENT=p11ne-agent
 EVBIN_RPC_CLIENT=p11ne-client
 EVBIN_RPC_SERVER=p11ne-server
-EVBIN_RAND=p11ne-rand
 EVBIN_CLI=p11ne-cli
 EVBIN_INIT=p11ne-init
 EVBIN_P11_MOD=libvtok_p11.so
@@ -45,7 +44,6 @@ Commands:
         Each <target> must be one of:
             $EVBIN_RPC_CLIENT - the p11ne RPC client (parent-instance-side binary);
             $EVBIN_RPC_SERVER - the p11ne RPC server (enclave-side binary);
-            $EVBIN_RAND - the p11ne random seeder (enclave-side binary);
             $EVBIN_INIT - the p11ne enclave init (enclave-side binary);
             $EVBIN_P11_MOD - the p11ne PKCS#11 provider dyn lib (enclave-side binary);
             dev-image - the development version (i.e. not signed) of the  p11ne enclave image (EIF);
@@ -268,7 +266,6 @@ build_eif() {
 
     local bins=(
         "$EVAULT_BUILD_DIR/target/release/$EVBIN_RPC_SERVER"
-        "$EVAULT_BUILD_DIR/target/release/$EVBIN_RAND"
         "$EVAULT_BUILD_DIR/target/release/$EVBIN_INIT"
         "$EVAULT_BUILD_DIR/target/release/$EVBIN_P11_MOD"
     )
@@ -281,7 +278,6 @@ build_eif() {
     docker build -t "$eif_tag" \
         --build-arg BASE_IMG="$ENCLAVE_CTR_IMG" \
         --build-arg EVBIN_RPC_SERVER="$EVBIN_RPC_SERVER" \
-        --build-arg EVBIN_RAND="$EVBIN_RAND" \
         --build-arg EVBIN_INIT="$EVBIN_INIT" \
         --build-arg EVBIN_P11_MOD="$EVBIN_P11_MOD" \
         "$ctx_dir"
@@ -427,9 +423,6 @@ cmd_build() {
             "$EVBIN_RPC_SERVER")
                 enclave_bins+=("$EVBIN_RPC_SERVER")
                 ;;
-            "$EVBIN_RAND")
-                enclave_bins+=("$EVBIN_RAND")
-                ;;
             "$EVBIN_INIT")
                 enclave_bins+=("$EVBIN_INIT")
                 ;;
@@ -447,7 +440,7 @@ cmd_build() {
                 shift 3
                 ;;
             enclave-bins)
-                enclave_bins=("$EVBIN_RPC_SERVER" "$EVBIN_RAND" "$EVBIN_INIT")
+                enclave_bins=("$EVBIN_RPC_SERVER" "$EVBIN_INIT")
                 p11_mod=y
                 ;;
             parent-bins)

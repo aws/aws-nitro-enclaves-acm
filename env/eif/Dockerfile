@@ -5,14 +5,12 @@ ARG BASE_IMG
 FROM $BASE_IMG as builder
 
 ARG EVBIN_RPC_SERVER
-ARG EVBIN_RAND
 ARG EVBIN_P11_MOD
 ARG EVBIN_INIT
 
 USER root
 
 COPY $EVBIN_RPC_SERVER /usr/bin/
-COPY $EVBIN_RAND /usr/bin/
 COPY $EVBIN_P11_MOD /usr/lib/
 COPY $EVBIN_INIT /usr/bin/
 
@@ -22,7 +20,6 @@ WORKDIR /rootfs
 # Collect eVault lib deps
 RUN BINS="\
     /usr/bin/$EVBIN_RPC_SERVER \
-    /usr/bin/$EVBIN_RAND \
     /usr/bin/$EVBIN_INIT \
     /usr/lib/$EVBIN_P11_MOD \
     /usr/bin/p11-kit \

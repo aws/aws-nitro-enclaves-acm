@@ -1,9 +1,9 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 [workspace]
-members = ["src/vtok_agent", "src/vtok_common", "src/vtok_p11", "src/vtok_rpc", "src/vtok_rand", "src/vtok_srv", "src/vtok_tool", "tests/helpers", "src/vtok_init"]
-default-members = ["src/vtok_agent", "src/vtok_common", "src/vtok_p11", "src/vtok_rpc", "src/vtok_rand", "src/vtok_srv", "src/vtok_tool", "src/vtok_init"]
+members = ["src/vtok_agent", "src/vtok_common", "src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool", "tests/helpers", "src/vtok_init"]
+default-members = ["src/vtok_agent", "src/vtok_common", "src/vtok_p11", "src/vtok_rpc", "src/vtok_srv", "src/vtok_tool", "src/vtok_init"]
 
 [profile.release]
 codegen-units=1
