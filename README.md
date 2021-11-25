@@ -8,12 +8,16 @@ run the PKCS#11 provider as a `p11-kit` module. These containers are designed to
 be mostly transparent to the developer, and employed via the omnitool at
 `tools/devtool`.
 
+## How to install and setup
+
+The user guide for the ACM for Nitro Enclaves can be found at https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-refapp.html.
+
 ## Design Overview
 
 ACM for Nitro Enclaves is a PKCS#11 provider (i.e. a dynamic library exposing the
 PKCS#11 API). The `p11-kit` client and server are used to transport crypto
 operation calls from the parent instance to the enclave, where they are handled
-by this provider via the BoringSSL libcrypto.
+by this provider via the AWS cryptographic library.
 
 Here is the general flow of a parent instance crypto operation:
 
@@ -64,22 +68,24 @@ environment setup is required prior to building and/or running.
 
 ## Components
 
-eVault has a few different components, some meant to be run inside the enclave,
+ACM for Nitro Enclaves has a few different components, some meant to be run inside the enclave,
 others inside the parent instance:
 - enclave-side components:
-  - `p11ne-rand` - entropy seeder, run once at enclave boot;
-  - `p11ne-srv` - the eVault RPC server, used to query the state of the eVault
-     device, and to provision its database;
-  - `libvtok_p11.so` - the PKCS#11 provider;
+  - `p11ne-srv` - the AWS for NE RPC server, used to query the state of the pkcs#11 enclave
+                  device, and to provision its database;
+  - `libvtok_p11.so` - the PKCS#11 provider implementation;
 - parent-instance-side components:
-  - `p11ne-client` - the eVault RPC client, providing a low-level interface to
-    the eVault RPC server;
+  - `p11ne-client` - the ACM for NE RPC client, providing a low-level interface to
+                     the ACM for NE RPC server;
   - `p11ne-cli` - a user-facing CLI tool that can be used to manage the
-    eVault enclave (e.g. provision PKCS#11 tokens)
+                  ACM for NE enclave (e.g. provision a PKCS#11 token);
+  - `p11ne-db`- a user-facing CLI tool that can be used to pack a private key and
+                its associated certificate (or certificate chain) in a database format
+				for provisioning a PKCS#11 token
 
 ## Building
 
-Use `devtool` to build any eVault component, by invoking `devtool build <component>`.
+Use `devtool` to build any ACM for NE component, by invoking `devtool build <component>`.
 
 E.g. building the PKCS#11 provider:
 
@@ -87,7 +93,7 @@ E.g. building the PKCS#11 provider:
 tools/devtool build libvtok_p11.so
 ```
 
-Building the (development version of) eVault enclave image (EIF):
+Building the (development version of) ACM for NE enclave image (EIF):
 
 ```bash
 tools/devtool build dev-image
@@ -139,11 +145,21 @@ openssl pkeyutl -keyform engine -engine pkcs11 -sign -inkey \
 
 The `tests` directory contains integration tests that can be executed to
 validate the PKCS#11 module functionality using openssl or OpenSC pkcs11-tool.
-Tests can be executed via:
+
+Build the testhelper binary:
 ```bash
-./tests/testtool openssl
+$ cd tests/helpers && cargo build release
+
+$ cd - && cp build/target/release/testhelpers ./tests
 ```
-The above test suite is also applicable when using real enclaves.
+After this, the test suite can be executed via the command:
+```bash
+$ ./tests/testtool openssl --kms-key-id <your-kms-key-id> --kms-region <your-kms-key-region>
+
+```
+The above cryptographic test suite is applicable when using real enclaves on EC2 instances
+where an instance role and a KMS key has already been setup accordingly for provisioning the
+test pkcs#11 token with the private keys.
 
 ## License
 
