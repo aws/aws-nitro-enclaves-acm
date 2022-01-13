@@ -103,40 +103,46 @@ impl Db {
                 }
             }
 
-            // If the provisioned private key has an optional X509 certificate
-            // or certificate chain attached to it
-            if let Some(x509_pem) = &key_config.cert_pem {
-                let x509_chain = crypto::X509Chain::chain_from_pem(&x509_pem.as_str())
-                    .map_err(Error::PemError)?;
+            let x509_vfy = || -> Result<()> {
+                // If the provisioned private key has an optional X509 certificate
+                // or certificate chain attached to it. Soft failure
+                if let Some(x509_pem) = &key_config.cert_pem {
+                    let x509_chain = crypto::X509Chain::chain_from_pem(&x509_pem.as_str())
+                        .map_err(Error::PemError)?;
 
-                // If multiple certs, build and verify the chain, otherwise check if it
-                // is a self-signed certificate.
-                match x509_chain.multiple_certs() {
-                    true => x509_chain.verify_chain().map_err(Error::CryptoError)?,
-                    false => x509_chain.verify(pkey).map_err(Error::CryptoError)?,
+                    // If multiple certs, build and verify the chain, otherwise check if it
+                    // is a self-signed certificate.
+                    match x509_chain.multiple_certs() {
+                        true => x509_chain.verify_chain().map_err(Error::CryptoError)?,
+                        false => x509_chain.verify(pkey).map_err(Error::CryptoError)?,
+                    }
+                    for (pos, x509) in x509_chain.enumerate() {
+                        // The first certificate shares the same ID with the private key
+                        // and the rest of the certificate chain get incremental IDs and
+                        // are marked as CAs.
+                        let (categ, id) = {
+                            if pos == 0 {
+                                (crypto::CertCategory::Token, key_config.id)
+                            } else {
+                                (crypto::CertCategory::Authority, key_config.id + pos)
+                            }
+                        };
+                        let x509_obj = CertInfo {
+                            categ: categ,
+                            id: id,
+                            label: format!("acm-ne-cert-{}", pos).to_string(),
+                            subject_der: x509.subject_name().map_err(Error::CryptoError)?,
+                            issuer_der: x509.issuer().map_err(Error::CryptoError)?,
+                            serno_der: x509.serial_no().map_err(Error::CryptoError)?,
+                            cert_der: x509.to_der().map_err(Error::CryptoError)?,
+                        };
+                        objects.push(Object::new_x509_cert(x509_obj));
+                    }
                 }
-                for (pos, x509) in x509_chain.enumerate() {
-                    // The first certificate shares the same ID with the private key
-                    // and the rest of the certificate chain get incremental IDs and
-                    // are marked as CAs.
-                    let (categ, id) = {
-                        if pos == 0 {
-                            (crypto::CertCategory::Token, key_config.id)
-                        } else {
-                            (crypto::CertCategory::Authority, key_config.id + pos)
-                        }
-                    };
-                    let x509_obj = CertInfo {
-                        categ: categ,
-                        id: id,
-                        label: format!("acm-ne-cert-{}", pos).to_string(),
-                        subject_der: x509.subject_name().map_err(Error::CryptoError)?,
-                        issuer_der: x509.issuer().map_err(Error::CryptoError)?,
-                        serno_der: x509.serial_no().map_err(Error::CryptoError)?,
-                        cert_der: x509.to_der().map_err(Error::CryptoError)?,
-                    };
-                    objects.push(Object::new_x509_cert(x509_obj));
-                }
+                Ok(())
+            };
+            if let Err(_) = x509_vfy() {
+                warn!("X509 certificate chain verification failed.");
             }
         }
 
