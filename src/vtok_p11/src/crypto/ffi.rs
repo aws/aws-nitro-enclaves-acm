@@ -26,6 +26,7 @@ pub const EVP_PKEY_EC: c_int = 408;
 
 /// X509 verification purpose flag
 pub const X509_V_FLAG_X509_STRICT: c_ulong = 0;
+pub const X509_V_FLAG_PARTIAL_CHAIN: c_ulong = 0x80000;
 pub const X509_PURPOSE_ANY: c_int = 7;
 
 /// Opaque cryptographic objects
@@ -125,6 +126,9 @@ pub struct cbb_st {
     is_child: c_char,
 }
 pub type CBB = cbb_st;
+
+pub type X509_STORE_CTX_verify_cb =
+    Option<extern "C" fn(sts: c_int, ctx: *mut X509_STORE_CTX) -> c_int>;
 
 impl CBB {
     pub fn new() -> Result<Self, super::Error> {
@@ -385,6 +389,22 @@ extern "C" {
     pub fn X509_STORE_add_cert(store: *mut X509_STORE, x509: *const X509) -> c_int;
     pub fn X509_STORE_set_flags(store: *mut X509_STORE, flags: c_ulong) -> c_int;
     pub fn X509_STORE_CTX_set_purpose(ctx: *mut X509_STORE_CTX, purpose: c_int) -> c_int;
+    pub fn X509_STORE_CTX_set_verify_cb(ctx: *mut X509_STORE_CTX, cb: X509_STORE_CTX_verify_cb);
     pub fn X509_verify_cert(ctx: *mut X509_STORE_CTX) -> c_int;
     pub fn X509_verify(cert: *const X509, pkey: *const EVP_PKEY) -> c_int;
+    pub fn X509_STORE_CTX_get_error(ctx: *mut X509_STORE_CTX) -> c_int;
+    pub fn X509_STORE_CTX_get_error_depth(ctx: *mut X509_STORE_CTX) -> c_int;
+}
+
+/// Callback for handling x509 verification issues or debugging
+pub extern "C" fn x509_verify_cb(sts: c_int, ctx: *mut X509_STORE_CTX) -> c_int {
+    let ret_sts = sts;
+    if ret_sts == 0 {
+        let err = unsafe { X509_STORE_CTX_get_error(ctx) };
+        let err_depth = unsafe { X509_STORE_CTX_get_error_depth(ctx) };
+
+        warn!("X509 verification error: err {} depth {}", err, err_depth);
+    }
+    // Resume crypto backend behavior
+    ret_sts
 }
