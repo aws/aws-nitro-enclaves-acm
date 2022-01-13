@@ -911,6 +911,12 @@ cmd_openssl() {
         log_test_result "test_x509_valid_chain" $?
         cleanup_key --key-label "valid_chain"
 
+        echo "test_x509_noroot_chain"
+        provision_key_w_cert --kms-key-id "$key_id" --kms-region "$region" --key-label "noroot_chain"
+        p11tool --export "$URI_TOKEN;$URI_CERT" > /dev/null 2>&1
+        log_test_result "test_x509_noroot_chain" $?
+        cleanup_key --key-label "noroot_chain"
+
         echo "test_x509_invalid_chain"
         provision_key_w_cert --kms-key-id "$key_id" --kms-region "$region" --key-label "invalid_chain"
         p11tool --export "$URI_TOKEN;$URI_CERT" > /dev/null 2>&1

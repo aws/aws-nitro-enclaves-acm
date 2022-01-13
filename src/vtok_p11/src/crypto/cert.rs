@@ -1,4 +1,4 @@
-// Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2021-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use super::bignum_to_vec;
@@ -156,14 +156,20 @@ impl X509Chain {
     pub fn verify_chain(&self) -> Result<()> {
         let mut cert_store = FfiBox::new(unsafe { ffi::X509_STORE_new() })?;
         let mut rv = unsafe {
-            ffi::X509_STORE_set_flags(cert_store.as_mut_ptr(), ffi::X509_V_FLAG_X509_STRICT)
+            ffi::X509_STORE_set_flags(
+                cert_store.as_mut_ptr(),
+                // Verification is done 'offline' here and as per RFC 4158
+                // we might not have a root CA provisioned but only an
+                // incomplete (valid) certificate chain
+                ffi::X509_V_FLAG_X509_STRICT | ffi::X509_V_FLAG_PARTIAL_CHAIN,
+            )
         };
         if rv != 1 {
             return Err(Error::CertChainErr);
         }
         for (pos, cert) in self.enumerate() {
             if pos > 0 {
-                // Only intermediate and root certificates are stored for verification
+                // Only intermediate and/or root certificates are stored for verification
                 rv = unsafe { ffi::X509_STORE_add_cert(cert_store.as_mut_ptr(), cert.as_ptr()) };
                 if rv != 1 {
                     return Err(Error::CertChainErr);
@@ -182,6 +188,13 @@ impl X509Chain {
         if rv != 1 {
             return Err(Error::CertChainErr);
         }
+        unsafe {
+            ffi::X509_STORE_CTX_set_verify_cb(
+                cert_store_ctx.as_mut_ptr(),
+                Some(ffi::x509_verify_cb),
+            );
+        }
+
         // Set the purpose explicitly to avoid invalidation via
         // any special X509.V3 features.
         unsafe {
