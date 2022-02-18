@@ -1,4 +1,4 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # This Docker file sets up the development environment for the eVault components
@@ -34,9 +34,6 @@ RUN apk add \
     linux-headers \
     shadow \
     sudo
-
-# Only needed to build aws-lc
-RUN apk add quilt --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing
 
 RUN ln -s /usr/lib /usr/lib64
 
