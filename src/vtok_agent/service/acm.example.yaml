@@ -1,4 +1,4 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 ---
 # ACM for Nitro Enclaves config.
@@ -12,15 +12,28 @@
 #   - include the stanza file configured below (under `NginxStanza`)
 #     somewhere in the nginx.conf `server` section;
 # - start the nitro-enclaves-acm service.
-# 
+#
 # Enclave general configuration
 enclave:
   # Number of vCPUs to be assigned to the enclave
   cpu_count: 2
   # Memory (in MiB) to be assigned to the enclave
   memory_mib: 256
+
+# General options
+options:
+  # If NGINX is not running, force restart it
+  nginx_force_start: true
+
+  # The NGINX reload timeout period (milliseconds)
+  nginx_reload_wait_ms: 1000
+
+  # Certificate renewal check period (seconds)
+  sync_interval_secs: 600
+
+# Tokens general configuration
 tokens:
-    # A label for this PKCS#11 token
+  # A label for this PKCS#11 token
   - label: nginx-acm-token
     # Configure a managed token, sourced from an ACM certificate.
     source:
@@ -39,3 +52,26 @@ tokens:
         path: /etc/pki/nginx/nginx-acm.conf
         # Stanza file owner (i.e. the user nginx is configured to run as).
         user: nginx
+    # Attestation period (seconds)
+    refresh_interval_secs: 43200
+
+# - label: nginx-acm-token-2
+#   # Configure a managed token, sourced from an ACM certificate.
+#   source:
+#     Acm:
+#       # The certificate ARN
+#       # Note: this certificate must have been associated with the
+#       #       IAM role assigned to the instance on which ACM for
+#       #       Nitro Enclaves is run.
+#       certificate_arn: ""
+#   target:
+#     NginxStanza:
+#       # Path to the nginx stanza to be written by the ACM service whenever
+#       # the certificate configuration changes (e.g. after a certificate renewal).
+#       # This file must be included from the main nginx config `server` section,
+#       # as it will contain the TLS nginx configuration directives.
+#       path: /etc/pki/nginx/nginx-acm-2.conf
+#       # Stanza file owner (i.e. the user nginx is configured to run as).
+#       user: nginx
+#   # Attestation repeat period (seconds)
+#   #refresh_interval_secs: 43200
