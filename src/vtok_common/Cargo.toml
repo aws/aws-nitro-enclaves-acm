@@ -4,7 +4,7 @@
 [package]
 name = "vtok_common"
 version = "0.1.0"
-authors = ["Dan Horobeanu <dhr@amazon.com>"]
+authors = ["The AWS Nitro Enclaves Team <aws-nitro-enclaves-devel@amazon.com>"]
 edition = "2018"
 
 [dependencies]
