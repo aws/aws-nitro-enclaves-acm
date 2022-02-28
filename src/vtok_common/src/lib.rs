@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 extern crate libc;
@@ -16,7 +16,7 @@ pub mod defs {
     /// PKCS#11 provider description, as reported by vtok_p11.
     pub const DEVICE_DESCRIPTION: &str = "p11ne";
     /// Maximum number of slots/tokens exposed by our PKCS#11 provider.
-    pub const DEVICE_MAX_SLOTS: usize = 8;
+    pub const DEVICE_MAX_SLOTS: usize = 128;
 
     /// PKCS#11 provider slot description.
     pub const SLOT_DESCRIPTION: &str = "p11ne-slot";
