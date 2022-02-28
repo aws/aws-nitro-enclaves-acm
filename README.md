@@ -12,6 +12,11 @@ be mostly transparent to the developer, and employed via the omnitool at
 
 The user guide for the ACM for Nitro Enclaves can be found at https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-refapp.html.
 
+# Managed tokens
+
+Each token can store an end-entity private key and its associated ACM certificate chain. Up to 128 SSL/TLS X.509 ACM certificates can be managed via provisioned tokens by the nitro-enclaves-acm service.
+Configuration options can be found in the `/etc/nitro_enclaves/acm.yaml` post service installation.
+
 ## Design Overview
 
 ACM for Nitro Enclaves is a PKCS#11 provider (i.e. a dynamic library exposing the
@@ -148,7 +153,7 @@ validate the PKCS#11 module functionality using openssl or OpenSC pkcs11-tool.
 
 Build the testhelper binary:
 ```bash
-$ cd tests/helpers && cargo build release
+$ cd tests/helpers && cargo build --release
 
 $ cd - && cp build/target/release/testhelpers ./tests
 ```
