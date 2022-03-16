@@ -51,7 +51,7 @@ Here is the general flow of a parent instance crypto operation:
 
 | name                       | version              | link                                              |
 |----------------------------|----------------------|---------------------------------------------------|
-| aws-lc                     | v0.0.2               | https://github.com/awslabs/aws-lc/                |
+| aws-lc                     | v1.0.2               | https://github.com/awslabs/aws-lc/                |
 | aws-nitro-enclaves-sdk     | v0.2.0               | https://github.com/aws/aws-nitro-enclaves-sdk-c   |
 | s2n-tls                    | v1.1.1               | https://github.com/aws/s2n-tls.git                |
 | aws-c-common               | v0.6.1               | https://github.com/awslabs/aws-c-common           |

@@ -41,7 +41,7 @@ RUN mkdir -p /build
 WORKDIR /build
 
 # Build AWS libcrypto
-ENV AWS_LC_VER="v0.0.2"
+ENV AWS_LC_VER="v1.0.2"
 RUN git clone "https://github.com/awslabs/aws-lc.git" \
     && cd aws-lc \
     && git reset --hard $AWS_LC_VER \
