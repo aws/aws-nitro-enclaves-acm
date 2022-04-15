@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 extern crate lazy_static;
 extern crate log;
@@ -25,19 +25,26 @@ pub mod defs {
     pub const RUN_DIR: &str = "/run/nitro_enclaves/acm";
     pub const P11_MODULE_NAME: &str = "p11ne";
 
+    pub const SERVICE_NGINX: &str = "nginx";
+    pub const SERVICE_HTTPD: &str = "httpd";
+    pub const HTTPD_OVERRIDE_DATA: &str =
+        "[Service]\nType=forking\nExecStart=\nExecStart=/usr/sbin/httpd $OPTIONS -k start\n";
+    pub const HTTPD_OVERRIDE_PATH: &str = "/etc/systemd/system/httpd.service.d/httpd.conf";
+
     pub const DEFAULT_CONFIG_PATH: &str = "/etc/nitro_enclaves/acm.yaml";
     pub const DEFAULT_EIF_PATH: &str = "/usr/share/nitro_enclaves/p11ne/p11ne.eif";
     pub const DEFAULT_P11KIT_PORT: u32 = 9999;
     pub const DEFAULT_RPC_PORT: u32 = 10000;
     pub const DEFAULT_ENCLAVE_BOOT_TIMEOUT_MS: u64 = 5000;
-    pub const DEFAULT_NGINX_FORCE_START: bool = true;
-    pub const DEFAULT_NGINX_RELOAD_WAIT_MS: u64 = 1000;
+    pub const DEFAULT_FORCE_START: bool = true;
+    pub const DEFAULT_RELOAD_WAIT_MS: u64 = 1000;
     pub const DEFAULT_SYNC_INTERVAL_SECS: u64 = 600;
     pub const DEFAULT_TOKEN_REFRESH_INTERVAL_SECS: u64 = 12 * 3600;
     pub const DEFAULT_LOG_LEVEL: log::Level = log::Level::Info;
     pub const DEFAULT_LOG_TIMESTAMP: bool = false;
     pub const DEFAULT_ACM_BUCKET: &str = "prod";
     pub const DEFAULT_ATTESTATION_RETRY_COUNT: usize = 5;
+    pub const DEFAULT_SERVICE: &str = SERVICE_NGINX;
 }
 
 pub mod gdata {
