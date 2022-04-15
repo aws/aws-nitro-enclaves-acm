@@ -1,10 +1,8 @@
-// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::AsRawFd;
 use std::process::Command;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -14,7 +12,7 @@ use nix::unistd;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
-use super::PostSyncAction;
+use super::{httpd, nginx, PostSyncAction};
 use crate::imds;
 use crate::util;
 use crate::{config, defs, enclave, enclave::P11neEnclave};
@@ -38,6 +36,7 @@ pub enum Error {
     SourceDbEmpty,
     UpdateTokenError(schema::ApiError),
     TargetIoError(std::io::Error),
+    ManagedServiceUnknown,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -177,6 +176,22 @@ impl DbSource {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ManagedService {
+    Nginx,
+    Httpd,
+}
+
+impl ManagedService {
+    pub fn from_str(service: &str) -> Result<Self, Error> {
+        match service {
+            defs::SERVICE_NGINX => Ok(ManagedService::Nginx),
+            defs::SERVICE_HTTPD => Ok(ManagedService::Httpd),
+            _ => Err(Error::ManagedServiceUnknown),
+        }
+    }
+}
+
 pub struct ManagedToken {
     pub label: String,
     pub pin: String,
@@ -185,10 +200,15 @@ pub struct ManagedToken {
     enclave: Rc<P11neEnclave>,
     refresh_interval: Duration,
     next_refresh: Instant,
+    service: ManagedService,
 }
 
 impl ManagedToken {
-    pub fn new(token_config: config::Token, enclave: Rc<P11neEnclave>) -> Result<Self, Error> {
+    pub fn new(
+        token_config: config::Token,
+        enclave: Rc<P11neEnclave>,
+        service: ManagedService,
+    ) -> Result<Self, Error> {
         let pin = match token_config.pin {
             Some(pin) => pin,
             None => util::generate_pkcs11_pin().map_err(Error::PinGenerationError)?,
@@ -205,6 +225,7 @@ impl ManagedToken {
                     .unwrap_or(defs::DEFAULT_TOKEN_REFRESH_INTERVAL_SECS),
             ),
             next_refresh: Instant::now(),
+            service,
         })
     }
 
@@ -217,9 +238,9 @@ impl ManagedToken {
             .is_ok();
 
         match (is_online, db_changed, self.target.as_ref()) {
-            (true, true, Some(config::Target::NginxStanza { .. })) => {
+            (true, true, Some(_target)) => {
                 info!(
-                    "NGINX certificate changed. Updating token {}",
+                    "Managed service certificate changed. Updating token {}",
                     self.label.as_str()
                 );
 
@@ -233,7 +254,7 @@ impl ManagedToken {
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::UpdateTokenError)?;
 
-                debug!("Updating NGINX config");
+                debug!("Updating managed service configuration");
                 self.satisfy_target().or_else(|e| {
                     error!(
                         "Unable to satisfy target for token {}: {:?}",
@@ -271,7 +292,10 @@ impl ManagedToken {
                         .map_err(Error::RefreshTokenError)?;
                     self.next_refresh += self.refresh_interval;
                     Ok(maybe_target.as_ref().map(|t| match t {
-                        config::Target::NginxStanza { .. } => PostSyncAction::ReloadNginx,
+                        config::Target::Conf { .. } => match self.service {
+                            ManagedService::Nginx => PostSyncAction::ReloadNginx,
+                            ManagedService::Httpd => PostSyncAction::ReloadHttpd,
+                        },
                     }))
                 } else {
                     Ok(None)
@@ -315,7 +339,7 @@ impl ManagedToken {
 
         match self.target {
             None => Ok(None),
-            Some(config::Target::NginxStanza {
+            Some(config::Target::Conf {
                 ref user,
                 ref group,
                 ref path,
@@ -342,12 +366,16 @@ impl ManagedToken {
                 let cert_path = match self.db.cert_pem() {
                     None => None,
                     Some(cert_pem) => {
+                        let cert_name = match self.service {
+                            ManagedService::Nginx => "nginx-cert",
+                            ManagedService::Httpd => "httpd-cert",
+                        };
                         let cert_path = format!(
-                            "{}/nginx-cert-{}.pem",
+                            "{}/{}-{}.pem",
                             defs::RUN_DIR,
+                            cert_name,
                             util::bytes_to_hex(self.label.as_bytes())
                         );
-                        debug!("Writing {}", &cert_path);
                         OpenOptions::new()
                             .create(true)
                             .truncate(true)
@@ -361,40 +389,27 @@ impl ManagedToken {
                                 Ok(())
                             })
                             .map_err(Error::TargetIoError)?;
-                        debug!("Done writing {}", &cert_path);
                         Some(cert_path)
                     }
                 };
 
-                debug!("Ensuring dirs for file: {}", path);
                 util::create_dirs_for_file(path).map_err(Error::TargetIoError)?;
 
-                debug!("Writing {}", &path);
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .mode(0o440)
-                    .open(path)
-                    .map_err(Error::TargetIoError)
-                    .and_then(|mut file| {
-                        unistd::fchown(file.as_raw_fd(), uid, gid).map_err(Error::NixError)?;
-                        nix::sys::stat::fchmod(
-                            file.as_raw_fd(),
-                            // Safe becase 0o440 is valid.
-                            unsafe { nix::sys::stat::Mode::from_bits_unchecked(0o440) },
-                        )
-                        .map_err(Error::NixError)?;
-                        write!(file, "ssl_certificate_key \"engine:pkcs11:{}\";\n", key_uri)
-                            .map_err(Error::TargetIoError)?;
-                        if let Some(cp) = cert_path {
-                            write!(file, "ssl_certificate \"{}\";\n", cp)
-                                .map_err(Error::TargetIoError)?;
-                        }
-                        Ok(())
-                    })?;
-                debug!("Done writing {}", &path);
-                Ok(Some(PostSyncAction::ReloadNginx))
+                let post_action = match self.service {
+                    ManagedService::Nginx => {
+                        nginx::NginxService::write_tls_entries(
+                            &path, uid, gid, &key_uri, cert_path,
+                        )?;
+                        Some(PostSyncAction::ReloadNginx)
+                    }
+                    ManagedService::Httpd => {
+                        httpd::HttpdService::write_tls_entries(
+                            &path, uid, gid, &key_uri, cert_path,
+                        )?;
+                        Some(PostSyncAction::ReloadHttpd)
+                    }
+                };
+                Ok(post_action)
             }
         }
     }
