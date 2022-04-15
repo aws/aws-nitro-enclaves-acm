@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 use serde::{Deserialize, Serialize};
 use serde_yaml;
@@ -13,7 +13,9 @@ pub enum Error {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Target {
-    NginxStanza {
+    // Alias for backwards compatibility with config files
+    #[serde(alias = "NginxStanza")]
+    Conf {
         path: String,
         user: Option<String>,
         group: Option<String>,
@@ -68,10 +70,16 @@ pub struct Log {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Options {
-    #[serde(default = "Options::default_nginx_force_start")]
-    pub nginx_force_start: bool,
-    #[serde(default = "Options::default_nginx_reload_wait_ms")]
-    pub nginx_reload_wait_ms: u64,
+    #[serde(default = "Options::default_service")]
+    pub service: String,
+    #[serde(default = "Options::default_force_start")]
+    // Alias for backwards compatibility with config files
+    #[serde(alias = "nginx_force_start")]
+    pub force_start: bool,
+    #[serde(default = "Options::default_reload_wait_ms")]
+    // Alias for backwards compatibility with config files
+    #[serde(alias = "nginx_reload_wait_ms")]
+    pub reload_wait_ms: u64,
     #[serde(default = "Options::default_sync_interval_secs")]
     pub sync_interval_secs: u64,
 }
@@ -108,11 +116,14 @@ impl From<LogLevel> for log::Level {
 }
 
 impl Options {
-    fn default_nginx_force_start() -> bool {
-        defs::DEFAULT_NGINX_FORCE_START
+    fn default_service() -> String {
+        defs::DEFAULT_SERVICE.to_string()
     }
-    fn default_nginx_reload_wait_ms() -> u64 {
-        defs::DEFAULT_NGINX_RELOAD_WAIT_MS
+    fn default_force_start() -> bool {
+        defs::DEFAULT_FORCE_START
+    }
+    fn default_reload_wait_ms() -> u64 {
+        defs::DEFAULT_RELOAD_WAIT_MS
     }
     fn default_sync_interval_secs() -> u64 {
         defs::DEFAULT_SYNC_INTERVAL_SECS
@@ -122,8 +133,9 @@ impl Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            nginx_force_start: Self::default_nginx_force_start(),
-            nginx_reload_wait_ms: Self::default_nginx_reload_wait_ms(),
+            service: Self::default_service(),
+            force_start: Self::default_force_start(),
+            reload_wait_ms: Self::default_reload_wait_ms(),
             sync_interval_secs: Self::default_sync_interval_secs(),
         }
     }

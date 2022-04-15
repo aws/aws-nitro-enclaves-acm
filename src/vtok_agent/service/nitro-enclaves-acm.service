@@ -4,7 +4,7 @@ After=network-online.target
 DefaultDependencies=no
 Requires=nitro-enclaves-allocator.service
 After=nitro-enclaves-allocator.service
-Before=nginx.service
+Before=nginx.service httpd.service
 
 [Service]
 Type=simple
