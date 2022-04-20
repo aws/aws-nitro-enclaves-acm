@@ -52,16 +52,17 @@ Here is the general flow of a parent instance crypto operation:
 | name                       | version              | link                                              |
 |----------------------------|----------------------|---------------------------------------------------|
 | aws-lc                     | v1.0.2               | https://github.com/awslabs/aws-lc/                |
-| aws-nitro-enclaves-sdk     | v0.2.0               | https://github.com/aws/aws-nitro-enclaves-sdk-c   |
-| s2n-tls                    | v1.1.1               | https://github.com/aws/s2n-tls.git                |
-| aws-c-common               | v0.6.1               | https://github.com/awslabs/aws-c-common           |
-| aws-c-io                   | v0.10.9              | https://github.com/awslabs/aws-c-io               |
+| aws-nitro-enclaves-sdk     | v0.2.1               | https://github.com/aws/aws-nitro-enclaves-sdk-c   |
+| s2n-tls                    | v1.3.11              | https://github.com/aws/s2n-tls.git                |
+| aws-c-common               | v0.6.20              | https://github.com/awslabs/aws-c-common           |
+| aws-c-io                   | v0.10.21             | https://github.com/awslabs/aws-c-io               |
 | aws-c-compression          | v0.2.14              | https://github.com/awslabs/aws-c-compression      |
-| aws-c-http                 | v0.6.7               | https://github.com/awslabs/aws-c-http             |
-| aws-c-cal                  | v0.5.12              | https://github.com/awslabs/aws-c-cal              |
-| aws-c-auth                 | v0.6.4               | https://github.com/awslabs/aws-c-auth             |
-| aws-nitro-enclaves-nsm-api | v0.1.0               | https://github.com/aws/aws-nitro-enclaves-nsm-api |
-| json-c                     | json-c-0.15-20200726 | https://github.com/json-c/json-c                  |
+| aws-c-http                 | v0.6.13              | https://github.com/awslabs/aws-c-http             |
+| aws-c-cal                  | v0.5.17              | https://github.com/awslabs/aws-c-cal              |
+| aws-c-auth                 | v0.6.11              | https://github.com/awslabs/aws-c-auth             |
+| aws-c-sdkutils             | v0.1.2               | https://github.com/awslabs/aws-c-sdkutils         |
+| aws-nitro-enclaves-nsm-api | v0.2.1               | https://github.com/aws/aws-nitro-enclaves-nsm-api |
+| json-c                     | json-c-0.16-20220414 | https://github.com/json-c/json-c                  |
 
 `devtool` sets up two containers: one for emulating the enclave environment,
 and another for emulating the parent instance environment.
