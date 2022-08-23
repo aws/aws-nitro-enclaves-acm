@@ -8,7 +8,7 @@
 #       source container will start from scratch, cherry-picking only its
 #       required run-time dependencies from here.
 
-FROM alpine:3.12
+FROM alpine:3.16
 
 ARG USER
 ARG USER_ID
