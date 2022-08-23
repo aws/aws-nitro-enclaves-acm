@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 #![allow(non_snake_case)]
@@ -83,6 +83,8 @@ extern "C" {
 
     pub fn aws_kms_decrypt_blocking(
         client: *mut aws_nitro_enclaves_kms_client,
+        key_id: *mut aws_string,
+        encryption_algorithm: *mut aws_string,
         ciphertext: *const aws_byte_buf,
         plaintext: *mut aws_byte_buf,
     ) -> c_int;
