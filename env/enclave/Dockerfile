@@ -57,7 +57,7 @@ RUN git clone "https://github.com/awslabs/aws-lc.git" \
     && ldconfig /usr/lib
 
 # AWS-S2N
-ENV AWS_S2N_VER="v1.3.11"
+ENV AWS_S2N_VER="v1.3.20"
 RUN git clone https://github.com/aws/s2n-tls.git \
     && cd s2n-tls \
     && git reset --hard $AWS_S2N_VER \
@@ -70,7 +70,7 @@ RUN git clone https://github.com/aws/s2n-tls.git \
     && cmake --build build/ --parallel $(nproc) --target install
 
 # AWS-C-COMMON
-ENV AWS_C_COMMON_VER="v0.6.20"
+ENV AWS_C_COMMON_VER="v0.8.0"
 RUN git clone https://github.com/awslabs/aws-c-common.git \
     && cd aws-c-common \
     && git reset --hard $AWS_C_COMMON_VER \
@@ -96,7 +96,7 @@ RUN git clone https://github.com/awslabs/aws-c-sdkutils \
     && cmake --build build/ --parallel $(nproc) --target install
 
 # AWS-C-CAL
-ENV AWS_C_CAL_VER="v0.5.17"
+ENV AWS_C_CAL_VER="v0.5.18"
 RUN git clone https://github.com/awslabs/aws-c-cal.git \
     && cd aws-c-cal \
     && git reset --hard $AWS_C_CAL_VER \
@@ -109,7 +109,7 @@ RUN git clone https://github.com/awslabs/aws-c-cal.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # AWS-C-IO
-ENV AWS_C_IO_VER="v0.10.21"
+ENV AWS_C_IO_VER="v0.11.0"
 RUN git clone https://github.com/awslabs/aws-c-io.git \
     && cd aws-c-io \
     && git reset --hard $AWS_C_IO_VER \
@@ -136,7 +136,7 @@ RUN git clone http://github.com/awslabs/aws-c-compression.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # AWS-C-HTTP
-ENV AWS_C_HTTP_VER="v0.6.13"
+ENV AWS_C_HTTP_VER="v0.6.19"
 RUN git clone https://github.com/awslabs/aws-c-http.git \
     && cd aws-c-http \
     && git reset --hard $AWS_C_HTTP_VER \
@@ -149,7 +149,7 @@ RUN git clone https://github.com/awslabs/aws-c-http.git \
     && cmake --build build --parallel $(nproc) --target install
 
 # AWS-C-AUTH
-ENV AWS_C_AUTH_VER="v0.6.11"
+ENV AWS_C_AUTH_VER="v0.6.15"
 RUN git clone https://github.com/awslabs/aws-c-auth.git \
     && cd aws-c-auth \
     && git reset --hard $AWS_C_AUTH_VER \
