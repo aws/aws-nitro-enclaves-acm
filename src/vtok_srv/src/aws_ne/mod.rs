@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 mod ffi;
@@ -135,8 +135,15 @@ pub fn kms_decrypt(
 
     // Decrypt
     let mut plaintext_buf: ffi::aws_byte_buf = unsafe { std::mem::zeroed() };
-    let rc =
-        unsafe { ffi::aws_kms_decrypt_blocking(kms_client, &ciphertext_buf, &mut plaintext_buf) };
+    let rc = unsafe {
+        ffi::aws_kms_decrypt_blocking(
+            kms_client,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &ciphertext_buf,
+            &mut plaintext_buf,
+        )
+    };
     if rc != 0 {
         unsafe {
             ffi::aws_string_destroy_secure(key_id);
