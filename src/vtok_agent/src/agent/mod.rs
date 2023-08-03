@@ -225,16 +225,8 @@ impl PostSyncAction {
                     Ok(())
                 }
                 (pid, _) => {
-                    debug!("Sending SIGUSR2 to PID={}", pid);
-                    signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGUSR2)
-                        .map_err(Error::SendSignalError)?;
-                    debug!("Sending SIGWINCH to PID={}", pid);
-                    signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGWINCH)
-                        .map_err(Error::SendSignalError)?;
-                    debug!("Sleeping to allow NGINX to process live update.");
-                    std::thread::sleep(Duration::from_millis(wait_ms));
-                    debug!("Sending SIGQUIT to PID={}", pid);
-                    signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGQUIT)
+                    debug!("Sending SIGHUP to PID={}", pid);
+                    signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGHUP)
                         .map_err(Error::SendSignalError)?;
                     Ok(())
                 }
