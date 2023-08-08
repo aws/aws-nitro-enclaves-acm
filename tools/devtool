@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # Dev container versions. These should be incremented every time a change is made to their
@@ -30,7 +30,7 @@ EVBIN_CLI=p11ne-cli
 EVBIN_INIT=p11ne-init
 EVBIN_P11_MOD=libvtok_p11.so
 
-P11NE_PARENT_RUST_TOOLCHAIN=1.47.0
+P11NE_PARENT_RUST_TOOLCHAIN=1.63.0
 P11NE_ENCLAVE_RUST_TOOLCHAIN=1.63.0
 
 USAGE="\
