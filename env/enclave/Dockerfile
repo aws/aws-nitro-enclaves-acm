@@ -1,4 +1,4 @@
-# Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020-2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 # This Docker file sets up the development environment for the eVault components
@@ -41,7 +41,7 @@ RUN mkdir -p /build
 WORKDIR /build
 
 # Build AWS libcrypto
-ENV AWS_LC_VER="v1.0.2"
+ENV AWS_LC_VER="v1.12.0"
 RUN git clone "https://github.com/awslabs/aws-lc.git" \
     && cd aws-lc \
     && git reset --hard $AWS_LC_VER \
@@ -57,7 +57,7 @@ RUN git clone "https://github.com/awslabs/aws-lc.git" \
     && ldconfig /usr/lib
 
 # AWS-S2N
-ENV AWS_S2N_VER="v1.3.20"
+ENV AWS_S2N_VER="v1.3.46"
 RUN git clone https://github.com/aws/s2n-tls.git \
     && cd s2n-tls \
     && git reset --hard $AWS_S2N_VER \
@@ -178,7 +178,7 @@ RUN git clone https://github.com/json-c/json-c.git \
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $RUST_TOOLCHAIN
 
 # NSM LIB
-ENV AWS_NE_NSM_API_VER="v0.2.1"
+ENV AWS_NE_NSM_API_VER="v0.4.0"
 RUN git clone "https://github.com/aws/aws-nitro-enclaves-nsm-api" \
     && cd aws-nitro-enclaves-nsm-api \
     && git reset --hard $AWS_NE_NSM_API_VER \
@@ -187,7 +187,7 @@ RUN git clone "https://github.com/aws/aws-nitro-enclaves-nsm-api" \
     && mv target/release/nsm.h /usr/include/
 
 # AWS Nitro Enclaves SDK
-ENV AWS_NE_SDK_VER="v0.3.0"
+ENV AWS_NE_SDK_VER="v0.4.1"
 RUN git clone "https://github.com/aws/aws-nitro-enclaves-sdk-c" \
     && cd aws-nitro-enclaves-sdk-c \
     && git reset --hard $AWS_NE_SDK_VER \

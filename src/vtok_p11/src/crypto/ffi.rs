@@ -1,4 +1,4 @@
-// Copyright 2020-2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 #![allow(non_snake_case)]
@@ -109,21 +109,43 @@ pub struct ASN1_INTEGER {
 
 /// Transparent cryptographic objects
 #[repr(C)]
+#[derive(Copy,Clone)]
 pub struct cbb_buffer_st {
     buf: *mut u8,
     len: c_size_t,
     cap: c_size_t,
-    can_resize: c_char,
-    error: c_char,
+
+    /// From 2 bit fields (each of size 1).
+    /// 
+    /// Note: Rust doesn't have bitfields support yet:
+    /// https://github.com/rust-lang/rfcs/pull/3113
+    /// 
+    /// And it’s not standartized how bitfields are actually packed in C/C++,
+    /// but most of the compilers follow the same behaviour:
+    /// Use the type of the bitfield variable to pack as many fields as it fits,
+    /// if overflows - occupy more of such variables.
+    can_resize_and_error: c_uint,
+}
+#[repr(C)]
+#[derive(Copy,Clone)]
+pub struct cbb_child_st {
+    base: *mut cbb_buffer_st,
+    offset: c_size_t,
+    pending_len_len: u8,
+    
+    /// A single bitfield
+    pending_is_asn1: c_uint,
+}
+#[repr(C)]
+union cbb_st_base_or_child {
+    base: cbb_buffer_st,
+    child: cbb_child_st,
 }
 #[repr(C)]
 pub struct cbb_st {
-    base: *mut cbb_buffer_st,
     child: *mut CBB,
-    offset: c_size_t,
-    pending_len_len: u8,
-    pending_is_asn1: c_char,
     is_child: c_char,
+    u: cbb_st_base_or_child,
 }
 pub type CBB = cbb_st;
 
