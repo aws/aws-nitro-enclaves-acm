@@ -17,5 +17,5 @@ serde_json = "1.0"
 vtok_common = { path = "../vtok_common" }
 
 [dependencies.log]
-version = "0.4.8"
+version = "0.4.20"
 features = ["std"]
