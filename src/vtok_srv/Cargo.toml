@@ -7,7 +7,7 @@ description = "Nitro vToken provisioning server"
 
 [dependencies]
 libc = "0.2"
-base64 = "0.12"
+base64 = "0.21"
 vtok_common = { path = "../vtok_common" }
 vtok_rpc = { path = "../vtok_rpc" }
 

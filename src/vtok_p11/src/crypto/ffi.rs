@@ -109,21 +109,32 @@ pub struct ASN1_INTEGER {
 
 /// Transparent cryptographic objects
 #[repr(C)]
+#[derive(Copy,Clone)]
 pub struct cbb_buffer_st {
     buf: *mut u8,
     len: c_size_t,
     cap: c_size_t,
-    can_resize: c_char,
-    error: c_char,
+    /// from 2 bit fields (each of size 1)
+    can_resize_and_error: c_uint,
+}
+#[repr(C)]
+#[derive(Copy,Clone)]
+pub struct cbb_child_st {
+    base: *mut cbb_buffer_st,
+    offset: c_size_t,
+    pending_len_len: u8,
+    pending_is_asn1: c_uint,
+}
+#[repr(C)]
+union cbb_st_base_or_child {
+    base: cbb_buffer_st,
+    child: cbb_child_st,
 }
 #[repr(C)]
 pub struct cbb_st {
-    base: *mut cbb_buffer_st,
     child: *mut CBB,
-    offset: c_size_t,
-    pending_len_len: u8,
-    pending_is_asn1: c_char,
     is_child: c_char,
+    u: cbb_st_base_or_child,
 }
 pub type CBB = cbb_st;
 
