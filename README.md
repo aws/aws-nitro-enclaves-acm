@@ -51,9 +51,9 @@ Here is the general flow of a parent instance crypto operation:
 
 | name                       | version              | link                                              |
 |----------------------------|----------------------|---------------------------------------------------|
-| aws-lc                     | v1.0.2               | https://github.com/awslabs/aws-lc/                |
-| aws-nitro-enclaves-sdk     | v0.3.0               | https://github.com/aws/aws-nitro-enclaves-sdk-c   |
-| s2n-tls                    | v1.3.20              | https://github.com/aws/s2n-tls.git                |
+| aws-lc                     | v1.12.0              | https://github.com/awslabs/aws-lc/                |
+| aws-nitro-enclaves-sdk     | v0.4.1               | https://github.com/aws/aws-nitro-enclaves-sdk-c   |
+| s2n-tls                    | v1.3.46              | https://github.com/aws/s2n-tls.git                |
 | aws-c-common               | v0.8.0               | https://github.com/awslabs/aws-c-common           |
 | aws-c-io                   | v0.11.0              | https://github.com/awslabs/aws-c-io               |
 | aws-c-compression          | v0.2.14              | https://github.com/awslabs/aws-c-compression      |
@@ -61,7 +61,7 @@ Here is the general flow of a parent instance crypto operation:
 | aws-c-cal                  | v0.5.18              | https://github.com/awslabs/aws-c-cal              |
 | aws-c-auth                 | v0.6.15              | https://github.com/awslabs/aws-c-auth             |
 | aws-c-sdkutils             | v0.1.2               | https://github.com/awslabs/aws-c-sdkutils         |
-| aws-nitro-enclaves-nsm-api | v0.2.1               | https://github.com/aws/aws-nitro-enclaves-nsm-api |
+| aws-nitro-enclaves-nsm-api | v0.4.0               | https://github.com/aws/aws-nitro-enclaves-nsm-api |
 | json-c                     | json-c-0.16-20220414 | https://github.com/json-c/json-c                  |
 
 `devtool` sets up two containers: one for emulating the enclave environment,
