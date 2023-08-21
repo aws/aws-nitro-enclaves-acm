@@ -14,7 +14,7 @@ lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["std"] }
 nix = "0.20"
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 serde_json = "1.0"
 vtok_common = { path = "../vtok_common" }
 vtok_rpc = { path = "../vtok_rpc" }
