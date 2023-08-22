@@ -12,7 +12,7 @@ edition = "2018"
 [dependencies]
 lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["std"] }
-nix = "0.20"
+nix = "0.26"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
 serde_json = "1.0"
