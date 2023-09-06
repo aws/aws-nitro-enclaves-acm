@@ -275,7 +275,6 @@ openssl_ref_digestsign_rsapss() {
         -sign "$(get_key_file $keylabel private)" \
         -sigopt rsa_padding_mode:pss \
         -sigopt "rsa_pss_saltlen:$saltlen" \
-        -sigopt "digest:$digest" \
         -out "$outsign" "$input"
 
     return $?
@@ -292,7 +291,6 @@ openssl_ref_digestverify_rsapss() {
         -verify "$(get_key_file $keylabel public)" \
         -sigopt rsa_padding_mode:pss \
         -sigopt "rsa_pss_saltlen:$saltlen" \
-        -sigopt "digest:$digest" \
         -signature "$sign" "$input"
 
     return $?
@@ -760,7 +758,7 @@ provision_key() {
     done
 
     # Initialize a token with one key type
-    p11ne-db pack-key --id 1 --label testkey --key-file "$(get_key_file "$keylabel" private)" --out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
+    p11ne-db pack-key --id 1 --label "$keylabel" --key-file "$(get_key_file "$keylabel" private)" --out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
     ok_or_die "Cannot pack p11ne token test key."
 
     p11ne-cli init-token --key-db "$KEY_DB_DIR/$keylabel.db" --label "$TOKEN_LABEL" --pin "$PIN" > /dev/null 2>&1
@@ -785,7 +783,7 @@ provision_key_w_cert() {
     done
 
 	 # Initialize a token with one key type
-    p11ne-db pack-key --id 1 --label testkey --key-file "$(get_cert_file_key "$keylabel")" --cert-file "$(get_cert_file "$keylabel")" \
+    p11ne-db pack-key --id 1 --label "$keylabel" --key-file "$(get_cert_file_key "$keylabel")" --cert-file "$(get_cert_file "$keylabel")" \
 				--out-file "$KEY_DB_DIR/$keylabel" --kms-key-id "$key_id" --kms-region "$region"
     ok_or_die "Cannot pack p11ne token test key."
 
