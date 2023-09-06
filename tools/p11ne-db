@@ -65,8 +65,17 @@ cmd_pack-key() {
     which aws > /dev/null
     ok_or_die "aws cli is not present on this machine. Please install the aws cli and try again."
 
+     # Fetch AWS CLI version
+    local aws_cli_ver
+    aws_cli_ver=$(aws --version 2>&1 | cut -d " " -f1 | cut -d "/" -f2 | cut -d "." -f1)
+
     #encrypt with kms - the result is the Base64 representation of the cyphertext
-    enc_key=$(aws kms encrypt --key-id $key_id --plaintext "$key" --region $region --query CiphertextBlob --output text)
+    enc_cmd="aws kms encrypt --key-id $key_id --plaintext \"$key\" --region $region --query CiphertextBlob --output text"
+    if [[ $aws_cli_ver -gt 1 ]]; then
+        # Specify explicit binary format for aws cli v2
+        enc_cmd+=" --cli-binary-format raw-in-base64-out"
+    fi
+    enc_key=$(eval "$enc_cmd")
     ok_or_die "Failed to encrypt the key"
 
     # Read the cert (optional)
