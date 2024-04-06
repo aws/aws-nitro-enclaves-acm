@@ -186,7 +186,10 @@ impl ImdsCache {
     }
 
     fn fetch_instance_tag(token: &str, tag_key: &str) -> Result<String, Error> {
-        Self::fetch(format!("/latest/meta-data/tags/instance/{}", tag_key).as_str(), token)
+        Self::fetch(
+            format!("/latest/meta-data/tags/instance/{}", tag_key).as_str(),
+            token,
+        )
     }
 
     fn fetch_role_name(token: &str) -> Result<String, Error> {
@@ -195,7 +198,7 @@ impl ImdsCache {
 
     fn fetch_role_arn(token: &str) -> Result<String, Error> {
         if let Some(role_arn) = Self::fetch_instance_tag(token, INSTANCE_ROLE_ARN_TAG) {
-            return Ok(role_arn)
+            return Ok(role_arn);
         }
 
         let role_name = Self::fetch_role_name(token)?;
