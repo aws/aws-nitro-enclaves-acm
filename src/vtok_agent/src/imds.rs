@@ -197,7 +197,7 @@ impl ImdsCache {
     }
 
     fn fetch_role_arn(token: &str) -> Result<String, Error> {
-        if let Some(role_arn) = Self::fetch_instance_tag(token, INSTANCE_ROLE_ARN_TAG) {
+        if let Ok(role_arn) = Self::fetch_instance_tag(token, INSTANCE_ROLE_ARN_TAG) {
             return Ok(role_arn);
         }
 
