@@ -8,7 +8,7 @@ use super::defs;
 use crate::config;
 use crate::gdata;
 use crate::imds;
-use crate::util;
+use crate::util::{SystemdError, interruptible_sleep};
 use crate::{enclave, enclave::P11neEnclave};
 use log::{debug, error, info, warn};
 use mngtok::{ManagedService, ManagedToken};
@@ -30,15 +30,7 @@ pub enum Error {
     EnclaveError(enclave::Error),
     RemoveTokenError(schema::ApiError),
     ImdsError(imds::Error),
-    SendSignalError(nix::Error),
-    SystemdExecError(std::io::Error),
-    SystemdParsePidError,
-    SystemdShowPidError(Option<i32>, String),
-    SystemdStartNginxError(Option<i32>),
-    SystemdStartHttpdError(Option<i32>),
     Utf8Error(std::string::FromUtf8Error),
-    SystemdOverrideError,
-    SystemdReloadError,
     TokenError(mngtok::Error),
 }
 
@@ -99,7 +91,7 @@ impl Agent {
                 next_sync += sync_interval;
             }
 
-            util::interruptible_sleep(Duration::from_secs(1)).unwrap_or_default();
+            interruptible_sleep(Duration::from_secs(1)).unwrap_or_default();
             if gdata::EXIT_CONDITION.load(Ordering::SeqCst) {
                 return Ok(());
             }
@@ -180,26 +172,26 @@ impl PostSyncAction {
         Command::new("systemctl")
             .args(&["show", "--property=MainPID", "nginx.service"])
             .output()
-            .map_err(Error::SystemdExecError)
+            .map_err(SystemdError::ExecError)
             .and_then(|output| {
                 if !output.status.success() {
-                    return Err(Error::SystemdShowPidError(
+                    return Err(SystemdError::ShowPidError(
                         output.status.code(),
                         String::from_utf8_lossy(output.stderr.as_slice()).to_string(),
                     ));
                 }
                 String::from_utf8(output.stdout)
-                    .map_err(Error::Utf8Error)
+                    .map_err(SystemdError::StreamError)
                     .and_then(|line| {
                         line.as_str()
                             .trim()
                             .rsplit("=")
                             .next()
-                            .ok_or(Error::SystemdParsePidError)
+                            .ok_or(SystemdError::ParsePidError)
                             .and_then(|pid_str| {
                                 pid_str
                                     .parse::<i32>()
-                                    .map_err(|_| Error::SystemdParsePidError)
+                                    .map_err(|_| SystemdError::ParsePidError)
                             })
                     })
             })
@@ -209,10 +201,10 @@ impl PostSyncAction {
                     Command::new("systemctl")
                         .args(&["start", "nginx.service"])
                         .status()
-                        .map_err(Error::SystemdExecError)
+                        .map_err(SystemdError::ExecError)
                         .and_then(|status| {
                             if !status.success() {
-                                Err(Error::SystemdStartNginxError(status.code()))
+                                Err(SystemdError::StartError(status.code()))
                             } else {
                                 Ok(())
                             }
@@ -227,7 +219,7 @@ impl PostSyncAction {
                 (pid, _) => {
                     debug!("Sending SIGHUP to PID={}", pid);
                     signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGHUP)
-                        .map_err(Error::SendSignalError)?;
+                        .map_err(SystemdError::SendSignalError)?;
                     Ok(())
                 }
             })
@@ -241,26 +233,26 @@ impl PostSyncAction {
         Command::new("systemctl")
             .args(&["show", "--property=MainPID", "httpd.service"])
             .output()
-            .map_err(Error::SystemdExecError)
+            .map_err(SystemdError::ExecError)
             .and_then(|output| {
                 if !output.status.success() {
-                    return Err(Error::SystemdShowPidError(
+                    return Err(SystemdError::ShowPidError(
                         output.status.code(),
                         String::from_utf8_lossy(output.stderr.as_slice()).to_string(),
                     ));
                 }
                 String::from_utf8(output.stdout)
-                    .map_err(Error::Utf8Error)
+                    .map_err(SystemdError::StreamError)
                     .and_then(|line| {
                         line.as_str()
                             .trim()
                             .rsplit("=")
                             .next()
-                            .ok_or(Error::SystemdParsePidError)
+                            .ok_or(SystemdError::ParsePidError)
                             .and_then(|pid_str| {
                                 pid_str
                                     .parse::<i32>()
-                                    .map_err(|_| Error::SystemdParsePidError)
+                                    .map_err(|_| SystemdError::ParsePidError)
                             })
                     })
             })
@@ -271,7 +263,7 @@ impl PostSyncAction {
                     if !Path::new(defs::HTTPD_OVERRIDE_FILE).exists() {
                         info!("Overriding HTTPD systemd service file.");
                          if let Err(_) = create_dir_all(defs::HTTPD_OVERRIDE_DIR) {
-                            return Err(Error::SystemdOverrideError);
+                            return Err(SystemdError::OverrideError);
                         }
                         if let Err(_) = OpenOptions::new()
                             .create(true)
@@ -282,29 +274,29 @@ impl PostSyncAction {
                                 file.write_all(defs::HTTPD_OVERRIDE_DATA.as_bytes())?;
                                 Ok(())
                             }) {
-                                return Err(Error::SystemdOverrideError);
+                                return Err(SystemdError::OverrideError);
                             }
                         if let Err(_) = Command::new("systemctl")
                             .args(&["daemon-reload"])
                             .status()
-                            .map_err(Error::SystemdExecError)
+                            .map_err(SystemdError::ExecError)
                             .and_then(|status| {
                                 if !status.success() {
-                                    return Err(Error::SystemdStartHttpdError(status.code()));
+                                    return Err(SystemdError::StartError(status.code()));
                                 } else {
                                     Ok(())
                                 }
                             }) {
-                                return Err(Error::SystemdReloadError);
+                                return Err(SystemdError::ReloadError);
                             }
                     }
                     Command::new("systemctl")
                         .args(&["start", "httpd.service"])
                         .status()
-                        .map_err(Error::SystemdExecError)
+                        .map_err(SystemdError::ExecError)
                         .and_then(|status| {
                             if !status.success() {
-                                Err(Error::SystemdStartHttpdError(status.code()))
+                                Err(SystemdError::StartError(status.code()))
                             } else {
                                 Ok(())
                             }
@@ -319,16 +311,16 @@ impl PostSyncAction {
                 (pid, _) => {
                     debug!("Sending SIGWINCH to PID={}", pid);
                     signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGWINCH)
-                        .map_err(Error::SendSignalError)?;
+                        .map_err(SystemdError::SendSignalError)?;
                     debug!("Sleeping to allow HTTPD to process in-flight requests.");
                     std::thread::sleep(Duration::from_millis(wait_ms));
                     Command::new("systemctl")
                         .args(&["restart", "httpd.service"])
                         .status()
-                        .map_err(Error::SystemdExecError)
+                        .map_err(SystemdError::ExecError)
                         .and_then(|status| {
                             if !status.success() {
-                                Err(Error::SystemdStartHttpdError(status.code()))
+                                Err(SystemdError::StartError(status.code()))
                             } else {
                                 Ok(())
                             }

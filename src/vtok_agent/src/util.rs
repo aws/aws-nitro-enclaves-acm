@@ -14,6 +14,18 @@ pub enum SleepError {
     UserExit,
 }
 
+#[derive(Debug)]
+pub enum SystemdError {
+    SendSignalError(nix::Error),
+    ExecError(std::io::Error),
+    StartError(Option<i32>),
+    ParsePidError,
+    ShowPidError(Option<i32>, String),
+    OverrideError,
+    ReloadError,
+    StreamError(std::string::FromUtf8Error),
+}
+
 pub fn interruptible_sleep(dur: Duration) -> Result<(), SleepError> {
     let wake_time = Instant::now() + dur;
     loop {
