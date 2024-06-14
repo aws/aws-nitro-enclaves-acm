@@ -1,4 +1,4 @@
-// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fs::OpenOptions;
@@ -255,7 +255,7 @@ impl ManagedToken {
                     .map_err(Error::UpdateTokenError)?;
 
                 debug!("Updating managed service configuration");
-                self.satisfy_target().or_else(|e| {
+                self.satisfy_target(false).or_else(|e| {
                     error!(
                         "Unable to satisfy target for token {}: {:?}",
                         self.label.as_str(),
@@ -307,7 +307,7 @@ impl ManagedToken {
                     .add_token(self.to_schema_token()?)
                     .map_err(Error::EnclaveError)?
                     .map_err(Error::AddTokenError)?;
-                self.satisfy_target().or_else(|e| {
+                self.satisfy_target(true).or_else(|e| {
                     error!(
                         "Unable to satisfy target for token {}: {:?}",
                         self.label.as_str(),
@@ -319,7 +319,7 @@ impl ManagedToken {
         }
     }
 
-    fn satisfy_target(&self) -> Result<Option<PostSyncAction>, Error> {
+    fn satisfy_target(&self, restart_hint: bool) -> Result<Option<PostSyncAction>, Error> {
         let (key_id, key_label) = self
             .db
             .to_schema_keys()
@@ -400,7 +400,15 @@ impl ManagedToken {
                         nginx::NginxService::write_tls_entries(
                             &path, uid, gid, &key_uri, cert_path,
                         )?;
-                        Some(PostSyncAction::ReloadNginx)
+
+                        let post_sync_action = if restart_hint {
+                            PostSyncAction::RestartNginx
+                        } else {
+                            PostSyncAction::ReloadNginx
+                        };
+
+                        info!("Post-sync action for NGINX: {:?}", post_sync_action);
+                        Some(post_sync_action)
                     }
                     ManagedService::Httpd => {
                         httpd::HttpdService::write_tls_entries(

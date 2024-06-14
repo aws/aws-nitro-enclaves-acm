@@ -41,9 +41,10 @@ pub struct Agent {
     options: config::Options,
 }
 
-#[derive(Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub enum PostSyncAction {
     ReloadNginx,
+    RestartNginx,
     ReloadHttpd,
 }
 
@@ -164,11 +165,12 @@ impl PostSyncAction {
         );
         match self {
             Self::ReloadNginx => Self::reload_nginx(options.force_start, options.reload_wait_ms),
+            Self::RestartNginx => Self::restart_nginx(options.reload_wait_ms),
             Self::ReloadHttpd => Self::reload_httpd(options.force_start, options.reload_wait_ms),
         }
     }
 
-    fn reload_nginx(force_start: bool, wait_ms: u64) {
+    fn reload_nginx(force_start: bool, _: u64) {
         info!("Reloading NGINX configuration.");
         is_service_running("nginx.service")
             .and_then(|pid| match (pid, force_start) {
@@ -194,6 +196,27 @@ impl PostSyncAction {
             });
     }
 
+    fn restart_nginx(wait_ms: u64) {
+        info!("Restarting NGINX.");
+
+        if let Ok(pid) = is_service_running("nginx.service") {
+            debug!("Sending SIGWINCH to PID={}", pid);
+            signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGWINCH).unwrap_or_else(
+                |err| {
+                    error!("Error sending SIGWINCH: {:?}", err);
+                },
+            );
+
+            std::thread::sleep(Duration::from_millis(wait_ms));
+        } else {
+            info!("NGINX service is not running");
+        }
+
+        service_restart("nginx.service").unwrap_or_else(|err| {
+            error!("Unable to restart NGINX: {:?}", err);
+        });
+    }
+
     fn reload_httpd(force_start: bool, wait_ms: u64) {
         info!("Reloading HTTPD configuration.");
         is_service_running("httpd.service")
@@ -217,9 +240,10 @@ impl PostSyncAction {
                             }) {
                                 return Err(SystemdError::OverrideError);
                             }
+
                         if let Err(_) = systemd_reload() {
-                                return Err(SystemdError::ReloadError);
-                            }
+                            return Err(SystemdError::ReloadError);
+                        }
                     }
                     service_start("httpd.service")
                 }
