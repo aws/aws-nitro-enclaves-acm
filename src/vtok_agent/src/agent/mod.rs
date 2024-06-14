@@ -1,4 +1,4 @@
-// Copyright 2020-2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 mod httpd;
 mod mngtok;
@@ -8,7 +8,10 @@ use super::defs;
 use crate::config;
 use crate::gdata;
 use crate::imds;
-use crate::util::{SystemdError, interruptible_sleep};
+use crate::util::{
+    interruptible_sleep, is_service_running, service_restart, service_start, systemd_reload,
+    SystemdError,
+};
 use crate::{enclave, enclave::P11neEnclave};
 use log::{debug, error, info, warn};
 use mngtok::{ManagedService, ManagedToken};
@@ -17,7 +20,6 @@ use std::collections::HashSet;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -30,7 +32,6 @@ pub enum Error {
     EnclaveError(enclave::Error),
     RemoveTokenError(schema::ApiError),
     ImdsError(imds::Error),
-    Utf8Error(std::string::FromUtf8Error),
     TokenError(mngtok::Error),
 }
 
@@ -169,46 +170,11 @@ impl PostSyncAction {
 
     fn reload_nginx(force_start: bool, wait_ms: u64) {
         info!("Reloading NGINX configuration.");
-        Command::new("systemctl")
-            .args(&["show", "--property=MainPID", "nginx.service"])
-            .output()
-            .map_err(SystemdError::ExecError)
-            .and_then(|output| {
-                if !output.status.success() {
-                    return Err(SystemdError::ShowPidError(
-                        output.status.code(),
-                        String::from_utf8_lossy(output.stderr.as_slice()).to_string(),
-                    ));
-                }
-                String::from_utf8(output.stdout)
-                    .map_err(SystemdError::StreamError)
-                    .and_then(|line| {
-                        line.as_str()
-                            .trim()
-                            .rsplit("=")
-                            .next()
-                            .ok_or(SystemdError::ParsePidError)
-                            .and_then(|pid_str| {
-                                pid_str
-                                    .parse::<i32>()
-                                    .map_err(|_| SystemdError::ParsePidError)
-                            })
-                    })
-            })
+        is_service_running("nginx.service")
             .and_then(|pid| match (pid, force_start) {
                 (0, true) => {
                     info!("NGINX is not running. Starting it now.");
-                    Command::new("systemctl")
-                        .args(&["start", "nginx.service"])
-                        .status()
-                        .map_err(SystemdError::ExecError)
-                        .and_then(|status| {
-                            if !status.success() {
-                                Err(SystemdError::StartError(status.code()))
-                            } else {
-                                Ok(())
-                            }
-                        })
+                    service_start("nginx.service")
                 }
                 (0, false) => {
                     warn!(
@@ -230,32 +196,7 @@ impl PostSyncAction {
 
     fn reload_httpd(force_start: bool, wait_ms: u64) {
         info!("Reloading HTTPD configuration.");
-        Command::new("systemctl")
-            .args(&["show", "--property=MainPID", "httpd.service"])
-            .output()
-            .map_err(SystemdError::ExecError)
-            .and_then(|output| {
-                if !output.status.success() {
-                    return Err(SystemdError::ShowPidError(
-                        output.status.code(),
-                        String::from_utf8_lossy(output.stderr.as_slice()).to_string(),
-                    ));
-                }
-                String::from_utf8(output.stdout)
-                    .map_err(SystemdError::StreamError)
-                    .and_then(|line| {
-                        line.as_str()
-                            .trim()
-                            .rsplit("=")
-                            .next()
-                            .ok_or(SystemdError::ParsePidError)
-                            .and_then(|pid_str| {
-                                pid_str
-                                    .parse::<i32>()
-                                    .map_err(|_| SystemdError::ParsePidError)
-                            })
-                    })
-            })
+        is_service_running("httpd.service")
             .and_then(|pid| match (pid, force_start) {
                 (0, true) => {
                     info!("HTTPD is not running. Starting it now.");
@@ -276,31 +217,11 @@ impl PostSyncAction {
                             }) {
                                 return Err(SystemdError::OverrideError);
                             }
-                        if let Err(_) = Command::new("systemctl")
-                            .args(&["daemon-reload"])
-                            .status()
-                            .map_err(SystemdError::ExecError)
-                            .and_then(|status| {
-                                if !status.success() {
-                                    return Err(SystemdError::StartError(status.code()));
-                                } else {
-                                    Ok(())
-                                }
-                            }) {
+                        if let Err(_) = systemd_reload() {
                                 return Err(SystemdError::ReloadError);
                             }
                     }
-                    Command::new("systemctl")
-                        .args(&["start", "httpd.service"])
-                        .status()
-                        .map_err(SystemdError::ExecError)
-                        .and_then(|status| {
-                            if !status.success() {
-                                Err(SystemdError::StartError(status.code()))
-                            } else {
-                                Ok(())
-                            }
-                        })
+                    service_start("httpd.service")
                 }
                 (0, false) => {
                     warn!(
@@ -314,17 +235,7 @@ impl PostSyncAction {
                         .map_err(SystemdError::SendSignalError)?;
                     debug!("Sleeping to allow HTTPD to process in-flight requests.");
                     std::thread::sleep(Duration::from_millis(wait_ms));
-                    Command::new("systemctl")
-                        .args(&["restart", "httpd.service"])
-                        .status()
-                        .map_err(SystemdError::ExecError)
-                        .and_then(|status| {
-                            if !status.success() {
-                                Err(SystemdError::StartError(status.code()))
-                            } else {
-                                Ok(())
-                            }
-                        })
+                    service_restart("httpd.service")
                 }
             })
             .unwrap_or_else(|err| {
