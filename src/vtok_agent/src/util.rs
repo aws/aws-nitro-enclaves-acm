@@ -1,9 +1,10 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020-2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 use std::fmt::Write;
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::path::Path;
+use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
@@ -73,4 +74,59 @@ pub fn create_dirs_for_file<P: AsRef<Path>>(file_path: P) -> Result<(), std::io:
             format!("bad file path: {}", file_path.as_ref().display()),
         ))
         .and_then(|dir| std::fs::create_dir_all(dir))
+}
+
+pub fn is_service_running(service_name: &str) -> Result<i32, SystemdError> {
+    Command::new("systemctl")
+        .args(&["show", "--property=MainPID", service_name.clone()])
+        .output()
+        .map_err(SystemdError::ExecError)
+        .and_then(|output| {
+            if !output.status.success() {
+                return Err(SystemdError::ShowPidError(
+                    output.status.code(),
+                    String::from_utf8_lossy(output.stderr.as_slice()).to_string(),
+                ));
+            }
+            String::from_utf8(output.stdout)
+                .map_err(SystemdError::StreamError)
+                .and_then(|line| {
+                    line.as_str()
+                        .trim()
+                        .rsplit("=")
+                        .next()
+                        .ok_or(SystemdError::ParsePidError)
+                        .and_then(|pid_str| {
+                            pid_str
+                                .parse::<i32>()
+                                .map_err(|_| SystemdError::ParsePidError)
+                        })
+                })
+        })
+}
+
+fn service_exec(arg1: &str, arg2: &str) -> Result<(), SystemdError> {
+    Command::new("systemctl")
+        .args(&[arg1.clone(), arg2.clone()])
+        .status()
+        .map_err(SystemdError::ExecError)
+        .and_then(|status| {
+            if !status.success() {
+                Err(SystemdError::StartError(status.code()))
+            } else {
+                Ok(())
+            }
+        })
+}
+
+pub fn service_start(service_name: &str) -> Result<(), SystemdError> {
+    service_exec("start", service_name)
+}
+
+pub fn service_restart(service_name: &str) -> Result<(), SystemdError> {
+    service_exec("restart", service_name)
+}
+
+pub fn systemd_reload() -> Result<(), SystemdError> {
+    service_exec("daemon-reload", "-f")
 }
