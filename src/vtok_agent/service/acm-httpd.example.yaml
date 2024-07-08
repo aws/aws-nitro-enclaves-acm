@@ -43,6 +43,18 @@ tokens:
         #       IAM role assigned to the instance on which ACM for
         #       Nitro Enclaves is run.
         certificate_arn: ""
+      #S3
+        # The S3 URI of the key material database
+        #
+        # This token source allows you to fetch a testing key material
+        # database from a regular S3 bucket. It is primarily intended for
+        # development and testing purposes and should not be used in
+        # production environments.
+        #
+        # Note: The key material database object in the S3 bucket must be
+        #       accessible via the IAM role assigned to the instance
+        #       where ACM for Nitro Enclaves is running.
+        #uri: ""
     target:
       Conf:
         # Path to the server configuration file to be written by

@@ -20,8 +20,8 @@ use vtok_rpc::api::schema;
 
 #[derive(Debug)]
 pub enum Error {
-    AcmDbFetchError(Option<i32>, String),
-    AcmDbParseError(serde_json::Error),
+    KeyMaterialDbFetchError(Option<i32>, String),
+    KeyMaterialDbParseError(serde_json::Error),
     AddTokenError(schema::ApiError),
     AwsCliExecError(std::io::Error),
     BadGroup(String),
@@ -40,7 +40,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
-struct AcmDb {
+struct KeyMaterialDb {
     certificate: String,
     #[serde(rename = "certificateChain")]
     certificate_chain: String,
@@ -55,12 +55,59 @@ type FileDb = Vec<schema::PrivateKey>;
 enum DbSource {
     Acm {
         cert_arn: String,
-        db: AcmDb,
+        db: KeyMaterialDb,
         bucket: String,
+    },
+    S3 {
+        uri: String,
+        db: KeyMaterialDb,
     },
     File {
         db: FileDb,
     },
+}
+
+struct KeyMaterialSchemaBuilder<'a> {
+    label: &'a str,
+    encrypted_pem_b64: &'a String,
+    cert_pem: Option<&'a str>,
+    cert_chain_pem: Option<&'a str>,
+}
+
+impl<'a> KeyMaterialSchemaBuilder<'a> {
+    fn new(label: &'a str, encrypted_pem_b64: &'a String) -> Self {
+        KeyMaterialSchemaBuilder {
+            label,
+            encrypted_pem_b64,
+            cert_pem: None,
+            cert_chain_pem: None,
+        }
+    }
+
+    fn cert_pem(mut self, cert_pem: Option<&'a str>) -> Self {
+        self.cert_pem = cert_pem;
+        self
+    }
+
+    fn cert_chain_pem(mut self, cert_chain_pem: Option<&'a str>) -> Self {
+        self.cert_chain_pem = cert_chain_pem;
+        self
+    }
+
+    fn build(&self) -> Vec<schema::PrivateKey> {
+        let optcerts = self.cert_pem.map(|c| {
+            let mut cc = c.to_string();
+            self.cert_chain_pem.map(|ch| cc.push_str(ch));
+            cc
+        });
+
+        vec![schema::PrivateKey {
+            id: 1,
+            label: self.label.to_string(),
+            encrypted_pem_b64: self.encrypted_pem_b64.to_string(),
+            cert_pem: optcerts,
+        }]
+    }
 }
 
 impl DbSource {
@@ -71,12 +118,22 @@ impl DbSource {
                 bucket,
             } => {
                 let bucket = bucket.unwrap_or(defs::DEFAULT_ACM_BUCKET.to_string());
+                let uri = DbSource::new_acm_db_s3_uri(&certificate_arn, &bucket)?;
+
                 Ok(Self::Acm {
-                    db: Self::fetch_acm_db(certificate_arn.as_str(), bucket.as_str())?,
+                    db: Self::fetch_from_s3(&uri)?,
                     cert_arn: certificate_arn,
                     bucket,
                 })
-            }
+            },
+            config::Source::S3 {
+                uri,
+            } => {
+                Ok(Self::S3 {
+                    db: Self::fetch_from_s3(&uri)?,
+                    uri: uri,
+                })
+            },
             config::Source::FileDb { path } => Ok(Self::File {
                 db: Self::fetch_file_db(path.as_str())?,
             }),
@@ -90,74 +147,92 @@ impl DbSource {
                 cert_arn,
                 bucket,
             } => {
-                let new_db = Self::fetch_acm_db(cert_arn, bucket)?;
+                let uri = DbSource::new_acm_db_s3_uri(cert_arn, bucket)?;
+                let new_db = Self::fetch_from_s3(&uri)?;
                 let res = new_db != *db;
                 *db = new_db;
                 Ok(res)
-            }
+            },
+            Self::S3 {
+                ref mut db,
+                uri
+            } => {
+                let new_db = Self::fetch_from_s3(&uri)?;
+                let res = new_db != *db;
+                *db = new_db;
+                Ok(res)
+            },
             Self::File { .. } => Ok(false),
         }
     }
 
     pub fn to_schema_keys(&self) -> Vec<schema::PrivateKey> {
         match self {
-            Self::Acm { db, .. } => {
-                let optcerts = self.cert_pem().map(|c| {
-                    let mut cc = c.to_string();
-                    self.cert_chain_pem().map(|ch| cc.push_str(ch));
-                    cc
-                });
-                vec![schema::PrivateKey {
-                    id: 1,
-                    label: "acm-key".to_string(),
-                    encrypted_pem_b64: db.encrypted_private_key.clone(),
-                    cert_pem: optcerts,
-                }]
-            }
             Self::File { db, .. } => db.as_slice().to_vec(),
+            other_sources => {
+                let (token_label, db) = match other_sources {
+                    Self::Acm { db, .. } => {
+                        ("acm-key", db)
+                    },
+                    Self::S3 { db, .. } => {
+                        ("s3-key", db)
+                    },
+                    _ => {
+                        panic!("Unsupported source for key materials!");
+                    }
+                };
+
+                KeyMaterialSchemaBuilder::new(token_label, &db.encrypted_private_key)
+                    .cert_pem(self.cert_pem())
+                    .cert_chain_pem(self.cert_chain_pem())
+                    .build()
+            }
         }
     }
 
     pub fn cert_pem(&self) -> Option<&str> {
         match self {
-            Self::Acm { db, .. } => Some(db.certificate.as_str()),
+            Self::Acm { db, .. } | Self::S3 { db, .. } => Some(db.certificate.as_str()),
             Self::File { .. } => None,
         }
     }
 
     pub fn cert_chain_pem(&self) -> Option<&str> {
         match self {
-            Self::Acm { db, .. } => Some(db.certificate_chain.as_str()),
+            Self::Acm { db, .. } | Self::S3 { db, .. } => Some(db.certificate_chain.as_str()),
             Self::File { .. } => None,
         }
     }
 
-    fn fetch_acm_db(cert_arn: &str, bucket: &str) -> Result<AcmDb, Error> {
-        debug!("Fetching cert for arn: {}", cert_arn);
-        let s3_url = format!(
+    fn new_acm_db_s3_uri(cert_arn: &str, bucket: &str) -> Result<String, Error> {
+        Ok(format!(
             "s3://{}-ec2-enclave-certificate-{}-{}/{}/{}",
             imds::partition().map_err(Error::ImdsError)?,
             imds::region().map_err(Error::ImdsError)?,
             bucket,
             imds::role_arn().map_err(Error::ImdsError)?,
-            cert_arn
-        );
+            cert_arn,
+        ))
+    }
+
+    fn fetch_from_s3(s3_uri: &str) -> Result<KeyMaterialDb, Error> {
+        debug!("Fetching from {}", s3_uri);
         let output = Command::new("aws")
             .arg("s3")
             .args(&[
                 "--region",
                 imds::region().map_err(Error::ImdsError)?.as_str(),
             ])
-            .args(&["cp", s3_url.as_str(), "-"])
+            .args(&["cp", s3_uri, "-"])
             .output()
             .map_err(Error::AwsCliExecError)?;
         if !output.status.success() {
-            return Err(Error::AcmDbFetchError(
+            return Err(Error::KeyMaterialDbFetchError(
                 output.status.code(),
                 String::from_utf8_lossy(output.stderr.as_slice()).to_string(),
             ));
         }
-        serde_json::from_slice::<AcmDb>(output.stdout.as_slice()).map_err(Error::AcmDbParseError)
+        serde_json::from_slice::<KeyMaterialDb>(output.stdout.as_slice()).map_err(Error::KeyMaterialDbParseError)
     }
 
     fn fetch_file_db(path: &str) -> Result<FileDb, Error> {

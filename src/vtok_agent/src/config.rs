@@ -28,6 +28,9 @@ pub enum Source {
         certificate_arn: String,
         bucket: Option<String>,
     },
+    S3 {
+        uri: String,
+    },
     FileDb {
         path: String,
     },
