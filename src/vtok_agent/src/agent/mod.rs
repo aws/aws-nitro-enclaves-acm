@@ -110,8 +110,8 @@ impl Agent {
             info!("Syncing token {}", tok.label.as_str());
             match tok.sync() {
                 // TODO: tidy up and be more verbose
-                Err(mngtok::Error::AcmDbFetchError(_, _))
-                | Err(mngtok::Error::AcmDbParseError(_))
+                Err(mngtok::Error::KeyMaterialDbFetchError(_, _))
+                | Err(mngtok::Error::KeyMaterialDbParseError(_))
                 | Err(mngtok::Error::FileDbError(_))
                 | Err(mngtok::Error::FileDbParseError(_)) => {
                     error!("Broken token: {}", tok.label.as_str());
