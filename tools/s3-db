@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+# Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+MY_VERSION="1.0"
+MY_NAME="s3-db"
+MY_DESC="s3 database creation tool"
+
+# Helper functions
+# Send a decorated message to stdout, followed by a new line
+say() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Send a decorated message to stdout, without a trailing new line
+say_noln() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo -n "$(tput setaf 2)[$MY_NAME]$(tput sgr0) $*" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Send a text message to stderr
+say_err() {
+    [ -t 2 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 1)[$MY_NAME] $*$(tput sgr0)" 1>&2 \
+        || echo "[$MY_NAME] $*" 1>&2
+}
+
+# Send a warning-highlighted text to stdout
+say_warn() {
+    [ -t 1 ] && [ -n "$TERM" ] \
+        && echo "$(tput setaf 3)[$MY_NAME] $*$(tput sgr0)" \
+        || echo "[$MY_NAME] $*"
+}
+
+# Exit with an error message and (optional) code
+# Usage: die [-c <error code>] <error message>
+die() {
+    local code=1
+    [[ "$1" = "-c" ]] && {
+        code="$2"
+        shift 2
+    }
+    say_err "$@"
+    exit $code
+}
+
+# Exit with an error message if the last exit code is not 0
+ok_or_die() {
+    local code=$?
+    [[ $code -eq 0 ]] || die -c $code "$@"
+}
+
+# Check if AWS CLI is installed on the system
+ensure_aws_cli() {
+    which aws > /dev/null 2>&1
+    ok_or_die "The AWS command line interface (CLI) cannot be found. Aborting." \
+	    "Please make sure you have aws CLI (https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+		installed and properly configured."
+}
+
+# Check if jq is installed on the system
+ensure_jq() {
+    which jq > /dev/null 2>&1
+    ok_or_die "jq is not installed. Aborting." \
+	    "Please make sure you have jq installed."
+}
+
+# Function to check if an argument is provided
+check_argument() {
+    if [ -z "$1" ]; then
+        say_err "$2 is a mandatory argument."
+        exit 1
+    fi
+}
+
+parse_create_args() {
+    # Set the default output path
+    OUTPUT_PATH="$(dirname "$0")/out.db"
+
+    # Check if all sub-arguments are provided
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --kms-key-id)
+                check_argument "$2" "--kms-key-id"
+                KMS_KEY_ID="$2"
+                shift 2
+                ;;
+            --kms-region)
+                check_argument "$2" "--kms-region"
+                KMS_REGION="$2"
+                shift 2
+                ;;
+            --certificate-path)
+                check_argument "$2" "--certificate-path"
+                CERTIFICATE_PATH="$2"
+                shift 2
+                ;;
+            --private-key-path)
+                check_argument "$2" "--private-key-path"
+                PRIVATE_KEY_PATH="$2"
+                shift 2
+                ;;
+            --certificate-chain-path)
+                check_argument "$2" "--certificate-chain-path"
+                CERTIFICATE_CHAIN_PATH="$2"
+                shift 2
+                ;;
+            --output-path)
+                OUTPUT_PATH="$2"
+                shift 2
+                ;;
+            *)
+                say_err "Unknown argument $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check if all mandatory arguments are provided
+    check_argument "$KMS_KEY_ID" "--kms-key-id"
+    check_argument "$KMS_REGION" "--kms-region"
+    check_argument "$CERTIFICATE_PATH" "--certificate-path"
+    check_argument "$PRIVATE_KEY_PATH" "--private-key-path"
+}
+
+parse_push_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --s3-uri)
+                check_argument "$2" "--s3-uri"
+                S3_URI="$2"
+                shift 2
+                ;;
+            --s3-region)
+                check_argument "$2" "--s3-region"
+                S3_REGION="$2"
+                shift 2
+                ;;
+            --input-path)
+                check_argument "$2" "--input-path"
+                INPUT_PATH="$2"
+                shift 2
+                ;;
+            *)
+                say_err "Unknown argument $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Check if all mandatory arguments are provided
+    check_argument "$S3_URI" "--s3-uri"
+    check_argument "$S3_REGION" "--s3-region"
+    check_argument "$INPUT_PATH" "--input-path"
+}
+
+run_create_command() {
+    # Define a read-only local variable for the encryption method
+    readonly local encryption_method="SYMMETRIC_DEFAULT"
+
+    # Load the private key from the file and base64 encode it
+    private_key=$(base64 --wrap=0 "$PRIVATE_KEY_PATH")
+    ok_or_die "Failed to load private key from $PRIVATE_KEY_PATH"
+
+    # Encrypt the base64 encoded private key using KMS
+    encrypted_private_key=$(aws kms encrypt \
+        --key-id "$KMS_KEY_ID" \
+        --plaintext "$private_key" \
+        --output text \
+        --query CiphertextBlob \
+        --region "$KMS_REGION" \
+        --encryption-algorithm "$encryption_method")
+    ok_or_die "Failed to encrypt private key using KMS"
+
+    # Load the certificate from the file
+    certificate=$(cat "$CERTIFICATE_PATH")
+    ok_or_die "Failed to load certificate from $CERTIFICATE_PATH"
+
+    # Load the certificate chain from the file
+    certificate_chain=$(cat "$CERTIFICATE_CHAIN_PATH")
+    ok_or_die "Failed to load certificate chain from $CERTIFICATE_CHAIN_PATH"
+
+    # Create a JSON object with the required fields
+    json_object=$(jq -n \
+        --arg encrypted_private_key "$encrypted_private_key" \
+        --arg certificate "$certificate" \
+        --arg certificate_chain "$certificate_chain" \
+        --arg encryption_method "$encryption_method" \
+        '{
+            encryptedPrivateKey: $encrypted_private_key,
+            certificate: $certificate,
+            certificateChain: $certificate_chain,
+            encryptionMethod: $encryption_method
+        }')
+    ok_or_die "Failed to create JSON object"
+
+    # Save the JSON object to the output file
+    echo "$json_object" > "$OUTPUT_PATH"
+    ok_or_die "Failed to write JSON object to $OUTPUT_PATH"
+
+    say "JSON object saved to $OUTPUT_PATH"
+}
+
+run_push_command() {
+    # Check if the input file exists
+    if [ ! -f "$INPUT_PATH" ]; then
+        say_err "Input file $INPUT_PATH does not exist"
+        exit 1
+    fi
+
+    # Upload the file to S3
+    say "Uploading $INPUT_PATH to $S3_URI"
+    aws s3 cp "$INPUT_PATH" "$S3_URI" --region "$S3_REGION"
+    ok_or_die "Failed to upload $INPUT_PATH to $S3_URI"
+
+    say "File uploaded successfully"
+}
+
+show_help() {
+    say "Usage: $0 <command>"
+    say "Commands:"
+    say "  create    Create a new database"
+    say "    --kms-key-id <kms-key-id>        KMS Key ID for encryption"
+    say "    --kms-region <kms-region>        AWS Region for KMS"
+    say "    --certificate-path <path>        Path to the SSL certificate"
+    say "    --certificate-chain-path <path>  Path to the SSL certificate chain"
+    say "    --private-key-path <path>        Path to the SSL private key"
+    say "    --output-path <path>             Path for the output database (default: ./out.db)"
+    say "  push      Push the database to S3"
+    say "    --s3-uri <s3-uri>                S3 URI for the database"
+    say "    --s3-region <s3-region>          AWS Region for S3"
+    say "    --input-path <s3-db-path>        Path to the database file"
+    say "  help      Show this help message"
+}
+
+main() {
+    local arg="$1"
+    shift
+
+    case "$arg" in
+        create)
+            ensure_aws_cli
+            ensure_jq
+
+            # Parse the sub-arguments for the 'create' command
+            parse_create_args "$@"
+
+            # Run the 'create' command
+            run_create_command
+            ;;
+        help)
+            show_help
+            ;;
+        push)
+            ensure_aws_cli
+
+            # Parse the sub-arguments for the 'push' command
+            parse_push_args "$@"
+
+            # Run the 'push' command
+            run_push_command
+            ;;
+        *)
+            say_err "Incorrect usage. The main argument should be 'create', 'push', or 'help'."
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
