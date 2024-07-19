@@ -304,6 +304,62 @@ impl ManagedToken {
         })
     }
 
+    fn update(&mut self) -> Result<(), Error> {
+        self.enclave
+            .update_token(
+                self.label.clone(),
+                self.pin.clone(),
+                self.to_schema_token()?,
+            )
+            .map_err(Error::EnclaveError)?
+            .map_err(Error::UpdateTokenError)?;
+
+        if let Some(_target) = self.target.as_ref() {
+            debug!("Updating managed service configuration");
+            self.satisfy_target(false).or_else(|e| {
+                error!(
+                    "Failed to update managed service configuration for token {}: {:?}",
+                    self.label.as_str(),
+                    e
+                );
+                Ok(None)
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn refresh(&mut self) -> Result<(), Error> {
+        self.enclave
+            .refresh_token(
+                self.label.clone(),
+                self.pin.clone(),
+                Self::kms_envelope_key()?,
+            )
+            .map_err(Error::EnclaveError)?
+            .map_err(Error::RefreshTokenError)?;
+        self.next_refresh += self.refresh_interval;
+
+        Ok(())
+    }
+
+    fn add(&mut self) -> Result<(), Error> {
+        self.enclave
+            .add_token(self.to_schema_token()?)
+            .map_err(Error::EnclaveError)?
+            .map_err(Error::AddTokenError)?;
+        self.satisfy_target(true).or_else(|e| {
+            error!(
+                "Unable to satisfy target for token {}: {:?}",
+                self.label.as_str(),
+                e
+            );
+            Ok(None)
+        })?;
+
+        Ok(())
+    }
+
     pub fn sync(&mut self) -> Result<Option<PostSyncAction>, Error> {
         let db_changed = self.db.update()?;
         let is_online = self
@@ -312,79 +368,24 @@ impl ManagedToken {
             .map_err(Error::EnclaveError)?
             .is_ok();
 
-        match (is_online, db_changed, self.target.as_ref()) {
-            (true, true, Some(_target)) => {
-                info!(
-                    "Managed service certificate changed. Updating token {}",
-                    self.label.as_str()
-                );
-
-                debug!("Updating token {}", self.label.as_str());
-                self.enclave
-                    .update_token(
-                        self.label.clone(),
-                        self.pin.clone(),
-                        self.to_schema_token()?,
-                    )
-                    .map_err(Error::EnclaveError)?
-                    .map_err(Error::UpdateTokenError)?;
-
-                debug!("Updating managed service configuration");
-                self.satisfy_target(false).or_else(|e| {
-                    error!(
-                        "Unable to satisfy target for token {}: {:?}",
-                        self.label.as_str(),
-                        e
-                    );
-                    Ok(None)
-                })
+        match (is_online, db_changed) {
+            (true, true) => {
+                info!("DB change detected. Updating token: {}.", self.label.as_str());
+                self.update()?;
             }
-            (true, true, None) => {
-                info!(
-                    "DB change detected for token {}. Updating",
-                    self.label.as_str()
-                );
-                self.enclave
-                    .update_token(
-                        self.label.clone(),
-                        self.pin.clone(),
-                        self.to_schema_token()?,
-                    )
-                    .map_err(Error::EnclaveError)?
-                    .map_err(Error::UpdateTokenError)?;
-                Ok(None)
-            }
-            (true, false, maybe_target) => {
+            (true, false) => {
                 if self.next_refresh <= Instant::now() {
-                    info!("Refreshing token {}", self.label.as_str());
-                    self.enclave
-                        .refresh_token(
-                            self.label.clone(),
-                            self.pin.clone(),
-                            Self::kms_envelope_key()?,
-                        )
-                        .map_err(Error::EnclaveError)?
-                        .map_err(Error::RefreshTokenError)?;
-                    self.next_refresh += self.refresh_interval;
+                    info!("Refreshing token: {}.", self.label.as_str());
+                    self.refresh()?;
                 }
-                Ok(None)
             }
-            (false, _, _) => {
-                debug!("Adding token {}", self.label.as_str());
-                self.enclave
-                    .add_token(self.to_schema_token()?)
-                    .map_err(Error::EnclaveError)?
-                    .map_err(Error::AddTokenError)?;
-                self.satisfy_target(true).or_else(|e| {
-                    error!(
-                        "Unable to satisfy target for token {}: {:?}",
-                        self.label.as_str(),
-                        e
-                    );
-                    Ok(None)
-                })
+            (false, _) => {
+                debug!("Adding token: {}.", self.label.as_str());
+                self.add()?;
             }
         }
+
+        Ok(None)
     }
 
     fn satisfy_target(&self, restart_hint: bool) -> Result<Option<PostSyncAction>, Error> {
