@@ -106,6 +106,15 @@ impl Token {
         util::time::monotonic_secs() > self.expiry_ts
     }
 
+    pub fn refresh(&mut self, new_expiry_ts: u64) {
+        let needs_refresh = new_expiry_ts != self.expiry_ts;
+
+        if needs_refresh {
+            trace!("Refreshing token: {} with new expiry_ts: {}.", self.label, new_expiry_ts);
+            self.expiry_ts = new_expiry_ts;
+        }
+    }
+
     pub fn open_session(&mut self, handle: pkcs11::CK_SESSION_HANDLE) -> Result<()> {
         if self.sessions.len() >= defs::TOKEN_MAX_SESSIONS as usize {
             return Err(Error::SessionCount);
