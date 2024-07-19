@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::fs;
 use std::fs::OpenOptions;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::time::SystemTime;
 
 use crate::defs;
 use crate::util;
@@ -75,6 +77,14 @@ impl Config {
         serde_json::to_writer(BufWriter::new(file), &device).map_err(Error::SerdeError)?;
 
         Ok(())
+    }
+
+    /// Get the modification time of the config file
+    pub fn modification_time() -> Result<SystemTime, Error> {
+        fs::metadata(defs::DEVICE_CONFIG_PATH)
+            .map_err(Error::IoError)?
+            .modified()
+            .map_err(Error::IoError)
     }
 
     /// Load the config in read-only mode.
