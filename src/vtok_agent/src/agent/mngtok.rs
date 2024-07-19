@@ -366,15 +366,8 @@ impl ManagedToken {
                         .map_err(Error::EnclaveError)?
                         .map_err(Error::RefreshTokenError)?;
                     self.next_refresh += self.refresh_interval;
-                    Ok(maybe_target.as_ref().map(|t| match t {
-                        config::Target::Conf { .. } => match self.service {
-                            ManagedService::Nginx => PostSyncAction::ReloadNginx,
-                            ManagedService::Httpd => PostSyncAction::ReloadHttpd,
-                        },
-                    }))
-                } else {
-                    Ok(None)
                 }
+                Ok(None)
             }
             (false, _, _) => {
                 debug!("Adding token {}", self.label.as_str());
@@ -477,20 +470,13 @@ impl ManagedToken {
                             &path, uid, gid, &key_uri, cert_path,
                         )?;
 
-                        let post_sync_action = if restart_hint {
-                            PostSyncAction::RestartNginx
-                        } else {
-                            PostSyncAction::ReloadNginx
-                        };
-
-                        info!("Post-sync action for NGINX: {:?}", post_sync_action);
-                        Some(post_sync_action)
+                        restart_hint.then(|| PostSyncAction::RestartNginx)
                     }
                     ManagedService::Httpd => {
                         httpd::HttpdService::write_tls_entries(
                             &path, uid, gid, &key_uri, cert_path,
                         )?;
-                        Some(PostSyncAction::ReloadHttpd)
+                        None
                     }
                 };
                 Ok(post_action)

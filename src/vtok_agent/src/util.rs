@@ -23,7 +23,6 @@ pub enum SystemdError {
     ParsePidError,
     ShowPidError(Option<i32>, String),
     OverrideError,
-    ReloadError,
     StreamError(std::string::FromUtf8Error),
 }
 
@@ -125,8 +124,4 @@ pub fn service_start(service_name: &str) -> Result<(), SystemdError> {
 
 pub fn service_restart(service_name: &str) -> Result<(), SystemdError> {
     service_exec("restart", service_name)
-}
-
-pub fn systemd_reload() -> Result<(), SystemdError> {
-    service_exec("daemon-reload", "-f")
 }
