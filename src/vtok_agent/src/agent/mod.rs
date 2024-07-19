@@ -9,7 +9,7 @@ use crate::config;
 use crate::gdata;
 use crate::imds;
 use crate::util::{
-    interruptible_sleep, is_service_running, service_restart, service_start, systemd_reload,
+    interruptible_sleep, is_service_running, service_restart, service_start,
     SystemdError,
 };
 use crate::{enclave, enclave::P11neEnclave};
@@ -43,9 +43,7 @@ pub struct Agent {
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum PostSyncAction {
-    ReloadNginx,
     RestartNginx,
-    ReloadHttpd,
 }
 
 impl Agent {
@@ -164,36 +162,8 @@ impl PostSyncAction {
             options.sync_interval_secs
         );
         match self {
-            Self::ReloadNginx => Self::reload_nginx(options.force_start, options.reload_wait_ms),
             Self::RestartNginx => Self::restart_nginx(options.reload_wait_ms),
-            Self::ReloadHttpd => Self::reload_httpd(options.force_start, options.reload_wait_ms),
         }
-    }
-
-    fn reload_nginx(force_start: bool, _: u64) {
-        info!("Reloading NGINX configuration.");
-        is_service_running("nginx.service")
-            .and_then(|pid| match (pid, force_start) {
-                (0, true) => {
-                    info!("NGINX is not running. Starting it now.");
-                    service_start("nginx.service")
-                }
-                (0, false) => {
-                    warn!(
-                        "Unable to reload NGINX: it is not running and 'force_start' option is disabled."
-                    );
-                    Ok(())
-                }
-                (pid, _) => {
-                    debug!("Sending SIGHUP to PID={}", pid);
-                    signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGHUP)
-                        .map_err(SystemdError::SendSignalError)?;
-                    Ok(())
-                }
-            })
-            .unwrap_or_else(|err| {
-                error!("Unable to reload NGINX: {:?}", err);
-            });
     }
 
     fn restart_nginx(wait_ms: u64) {
@@ -215,55 +185,5 @@ impl PostSyncAction {
         service_restart("nginx.service").unwrap_or_else(|err| {
             error!("Unable to restart NGINX: {:?}", err);
         });
-    }
-
-    fn reload_httpd(force_start: bool, wait_ms: u64) {
-        info!("Reloading HTTPD configuration.");
-        is_service_running("httpd.service")
-            .and_then(|pid| match (pid, force_start) {
-                (0, true) => {
-                    info!("HTTPD is not running. Starting it now.");
-
-                    if !Path::new(defs::HTTPD_OVERRIDE_FILE).exists() {
-                        info!("Overriding HTTPD systemd service file.");
-                         if let Err(_) = create_dir_all(defs::HTTPD_OVERRIDE_DIR) {
-                            return Err(SystemdError::OverrideError);
-                        }
-                        if let Err(_) = OpenOptions::new()
-                            .create(true)
-                            .truncate(true)
-                            .write(true)
-                            .open(defs::HTTPD_OVERRIDE_FILE)
-                            .and_then(|mut file| {
-                                file.write_all(defs::HTTPD_OVERRIDE_DATA.as_bytes())?;
-                                Ok(())
-                            }) {
-                                return Err(SystemdError::OverrideError);
-                            }
-
-                        if let Err(_) = systemd_reload() {
-                            return Err(SystemdError::ReloadError);
-                        }
-                    }
-                    service_start("httpd.service")
-                }
-                (0, false) => {
-                    warn!(
-                        "Unable to reload HTTPD: it is not running and 'force_start' option is disabled."
-                    );
-                    Ok(())
-                }
-                (pid, _) => {
-                    debug!("Sending SIGWINCH to PID={}", pid);
-                    signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGWINCH)
-                        .map_err(SystemdError::SendSignalError)?;
-                    debug!("Sleeping to allow HTTPD to process in-flight requests.");
-                    std::thread::sleep(Duration::from_millis(wait_ms));
-                    service_restart("httpd.service")
-                }
-            })
-            .unwrap_or_else(|err| {
-                error!("Unable to reload HTTPD: {:?}", err);
-            });
     }
 }
