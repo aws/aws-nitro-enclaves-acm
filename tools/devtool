@@ -498,6 +498,7 @@ cmd_build() {
         ensure_enclave_ctr
         docker run --rm $interactive \
             -v "$EVAULT_SRC_DIR:$CTR_SRC_DIR" \
+            -v "$EVAULT_BUILD_DIR/cargo-registry:$CTR_HOME/.cargo/registry" \
             --workdir "$CTR_SRC_DIR" \
             "$ENCLAVE_CTR_IMG" \
             cargo build "${cargo_args[@]}" --lib
