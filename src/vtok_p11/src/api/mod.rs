@@ -55,8 +55,8 @@ macro_rules! lock_session_mut {
         let $sess_arc;
         let mut $session;
         {
-            lock_device!(guard, device);
-            $sess_arc = device.session($handle);
+            lock_device_mut!(guard, device);
+            $sess_arc = device.session_mut($handle);
             $session = match $sess_arc {
                 Some(ref sess) => sess.lock().unwrap(),
                 None => return crate::pkcs11::CKR_SESSION_HANDLE_INVALID,

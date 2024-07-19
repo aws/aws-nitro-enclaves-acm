@@ -120,6 +120,16 @@ impl Device {
             .and_then(|token| token.session(handle))
     }
 
+    pub fn session_mut(&mut self, handle: pkcs11::CK_SESSION_HANDLE) -> Option<Arc<Mutex<Session>>> {
+        let slot_id = *self.session_slot_map.get(&handle)?;
+
+        //todo: modify slots if necessary
+        match self.token(slot_id) {
+            Ok(token) => token.session(handle),
+            Err(_) => None,
+        }
+    }
+
     pub fn login(&mut self, session_handle: pkcs11::CK_SESSION_HANDLE, pin: &str) -> Result<()> {
         let slot_id = *self
             .session_slot_map
