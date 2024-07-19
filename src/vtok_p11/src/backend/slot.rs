@@ -56,4 +56,8 @@ impl Slot {
     pub fn token_mut(&mut self) -> Option<&mut Token> {
         self.token.as_mut().filter(|tok| !tok.has_expired())
     }
+
+    pub fn token_unchecked_mut(&mut self) -> Option<&mut Token> {
+        self.token.as_mut()
+    }
 }
