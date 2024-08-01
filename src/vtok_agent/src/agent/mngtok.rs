@@ -459,6 +459,7 @@ impl ManagedToken {
                             .and_then(|mut file| {
                                 file.write_all(cert_pem.as_bytes())?;
                                 if let Some(chain_pem) = self.db.cert_chain_pem() {
+                                    file.write(b"\n")?;
                                     file.write_all(chain_pem.as_bytes())?;
                                 }
                                 Ok(())
