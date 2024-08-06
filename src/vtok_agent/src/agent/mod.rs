@@ -9,8 +9,7 @@ use crate::config;
 use crate::gdata;
 use crate::imds;
 use crate::util::{
-    interruptible_sleep, is_service_running, service_restart, service_start,
-    SystemdError,
+    interruptible_sleep, is_service_running, service_restart, service_start, SystemdError,
 };
 use crate::{enclave, enclave::P11neEnclave};
 use log::{debug, error, info, warn};
@@ -43,6 +42,7 @@ pub struct Agent {
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum PostSyncAction {
+    RestartHttpd,
     RestartNginx,
 }
 
@@ -162,15 +162,18 @@ impl PostSyncAction {
             options.sync_interval_secs
         );
         match self {
-            Self::RestartNginx => Self::restart_nginx(options.reload_wait_ms),
+            Self::RestartNginx => Self::restart_webserver("nginx.service", options.reload_wait_ms),
+            Self::RestartHttpd => Self::restart_webserver("httpd.service", options.reload_wait_ms),
         }
     }
 
-    fn restart_nginx(wait_ms: u64) {
-        info!("Restarting NGINX.");
+    fn restart_webserver(service_name: &str, wait_ms: u64) {
+        info!("Restarting {}.", service_name);
 
-        if let Ok(pid) = is_service_running("nginx.service") {
+        if let Ok(pid) = is_service_running(service_name) {
             debug!("Sending SIGWINCH to PID={}", pid);
+            //http://nginx.org/en/docs/control.html
+            //https://httpd.apache.org/docs/2.4/stopping.html#gracefulstop
             signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGWINCH).unwrap_or_else(
                 |err| {
                     error!("Error sending SIGWINCH: {:?}", err);
@@ -179,11 +182,11 @@ impl PostSyncAction {
 
             std::thread::sleep(Duration::from_millis(wait_ms));
         } else {
-            info!("NGINX service is not running");
+            info!("{} service is not running", service_name);
         }
 
-        service_restart("nginx.service").unwrap_or_else(|err| {
-            error!("Unable to restart NGINX: {:?}", err);
+        service_restart(service_name).unwrap_or_else(|err| {
+            error!("Unable to restart {}: {:?}", service_name, err);
         });
     }
 }
