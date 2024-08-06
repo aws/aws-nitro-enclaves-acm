@@ -304,7 +304,7 @@ impl ManagedToken {
         })
     }
 
-    fn update(&mut self) -> Result<(), Error> {
+    fn update(&mut self) -> Result<Option<PostSyncAction>, Error> {
         self.enclave
             .update_token(
                 self.label.clone(),
@@ -315,18 +315,18 @@ impl ManagedToken {
             .map_err(Error::UpdateTokenError)?;
 
         if let Some(_target) = self.target.as_ref() {
-            debug!("Updating managed service configuration");
-            self.satisfy_target(false).or_else(|e| {
+            debug!("Updating managed service configuration.");
+            return self.satisfy_target(true).or_else(|e| {
                 error!(
                     "Failed to update managed service configuration for token {}: {:?}",
                     self.label.as_str(),
                     e
                 );
                 Ok(None)
-            })?;
+            });
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn refresh(&mut self) -> Result<(), Error> {
@@ -371,7 +371,7 @@ impl ManagedToken {
         match (is_online, db_changed) {
             (true, true) => {
                 info!("DB change detected. Updating token: {}.", self.label.as_str());
-                self.update()?;
+                return self.update();
             }
             (true, false) => {
                 if self.next_refresh <= Instant::now() {
