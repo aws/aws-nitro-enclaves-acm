@@ -343,21 +343,21 @@ impl ManagedToken {
         Ok(())
     }
 
-    fn add(&mut self) -> Result<(), Error> {
+    fn add(&mut self) -> Result<Option<PostSyncAction>, Error> {
         self.enclave
             .add_token(self.to_schema_token()?)
             .map_err(Error::EnclaveError)?
             .map_err(Error::AddTokenError)?;
-        self.satisfy_target(true).or_else(|e| {
+        return self.satisfy_target(true).or_else(|e| {
             error!(
                 "Unable to satisfy target for token {}: {:?}",
                 self.label.as_str(),
                 e
             );
             Ok(None)
-        })?;
+        });
 
-        Ok(())
+        Ok(None)
     }
 
     pub fn sync(&mut self) -> Result<Option<PostSyncAction>, Error> {
@@ -381,7 +381,7 @@ impl ManagedToken {
             }
             (false, _) => {
                 debug!("Adding token: {}.", self.label.as_str());
-                self.add()?;
+                return self.add();
             }
         }
 
