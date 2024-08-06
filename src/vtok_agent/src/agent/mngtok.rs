@@ -477,7 +477,8 @@ impl ManagedToken {
                         httpd::HttpdService::write_tls_entries(
                             &path, uid, gid, &key_uri, cert_path,
                         )?;
-                        None
+
+                        restart_hint.then(|| PostSyncAction::RestartHttpd)
                     }
                 };
                 Ok(post_action)
