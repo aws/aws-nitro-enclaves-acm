@@ -125,6 +125,68 @@ get_key_pkcs_uri() {
     echo "${URI_TOKEN};object=${keylabel};type=${keytype}"
 }
 
+create_test_certs() {
+    local root=root_ca
+    local inter=intermediate
+    local leaf=leaf
+    local breaker=combo_breaker
+
+    mkdir -p $CERTS_DIR
+    pushd $CERTS_DIR > /dev/null 2>&1
+
+    # Create root CA
+    openssl req -new -newkey rsa:4096 -nodes -out ${root}.csr -keyout ${root}_key.pem -extensions v3_ca \
+        -subj "/C=US/ST=Washington/L=Seattle/O=Certificate Testing/CN=${root}" > /dev/null 2>&1
+    openssl x509 -signkey ${root}_key.pem -days 180 -req -in ${root}.csr -set_serial 01 -out ${root}_cert.pem > /dev/null 2>&1
+
+    # Create intermediate CA
+    openssl req -new -newkey rsa:4096 -nodes -out ${inter}_01.csr -keyout ${inter}_01_key.pem \
+        -subj "/C=US/ST=Washington/L=Seattle/O=Certificate Testing/CN=${inter}_01" > /dev/null 2>&1
+    openssl x509 -CA ${root}_cert.pem -CAkey ${root}_key.pem -days 90 -req -in ${inter}_01.csr -set_serial 02 -out ${inter}_01_cert.pem > /dev/null 2>&1
+
+    # Create intermediate CA
+    openssl req -new -newkey rsa:4096 -nodes -out ${inter}_02.csr -keyout ${inter}_02_key.pem \
+        -subj "/C=US/ST=Washington/L=Seattle/O=Certificate Testing/CN=${inter}_02" > /dev/null 2>&1
+    openssl x509 -CA ${inter}_01_cert.pem -CAkey ${inter}_01_key.pem -days 60 -req -in ${inter}_02.csr -set_serial 03 -out ${inter}_02_cert.pem > /dev/null 2>&1
+
+    # Create leaf
+    openssl req -new -newkey rsa:4096 -nodes -out ${leaf}.csr -keyout ${leaf}_key.pem \
+        -subj "/C=US/ST=Washington/L=Seattle/O=Certificate Testing/CN=${leaf}" > /dev/null 2>&1
+    openssl x509 -CA ${inter}_02_cert.pem -CAkey ${inter}_02_key.pem -days 30 -req -in ${leaf}.csr -set_serial 04 -out ${leaf}_cert.pem > /dev/null 2>&1
+
+    # Create combobreaker
+    openssl req -new -newkey rsa:4096 -nodes -out ${breaker}.csr -keyout ${breaker}_key.pem \
+	-subj "/C=US/ST=Washington/L=Seattle/O=Breakage Testing/CN=${breaker}" > /dev/null 2>&1
+    openssl x509 -signkey ${breaker}_key.pem -days 180 -req -in ${breaker}.csr -set_serial 99 -out ${breaker}_cert.pem > /dev/null 2>&1
+
+
+    # Create test certificate combinations
+    #
+    # Single selfsigned certificate
+    cp ${root}_cert.pem selfsigned_cert.pem
+    cp ${root}_key.pem selfsigned_key.pem
+
+    # Valid chain without a root
+    cat ${leaf}_cert.pem ${inter}_02_cert.pem ${inter}_01_cert.pem > noroot_chain_cert.pem
+    cp ${leaf}_key.pem noroot_chain_key.pem
+
+    # Valid chain with root
+    cat ${leaf}_cert.pem ${inter}_02_cert.pem ${inter}_01_cert.pem ${root}_cert.pem > valid_chain_cert.pem
+    cp ${leaf}_key.pem valid_chain_key.pem
+
+    # invalid chain
+    cat ${leaf}_cert.pem ${breaker}_cert.pem ${root}_cert.pem > invalid_chain_cert.pem
+    cp ${leaf}_key.pem invalid_chain_key.pem
+
+    # Cleanup intermediate files
+    rm -rf ${leaf}_*.pem ${leaf}.csr
+    rm -rf ${inter}_*.pem ${inter}_*.csr
+    rm -rf ${root}_*.pem ${root}.csr
+    rm -rf ${breaker}_*.pem ${breaker}.csr
+
+    popd > /dev/null 2>&1
+}
+
 log_test_result() {
     local testname="$1"
     local test_exitcode="$2"
@@ -737,6 +799,7 @@ cleanup_test_env() {
     p11ne-cli stop > /dev/null 2>&1
 
     rm -rf "$KEY_DB_DIR"
+    rm -rf "$CERTS_DIR"
 
     # TODO: Destroy kms key, detach role, destroy role
 }
@@ -896,6 +959,9 @@ cmd_openssl() {
     # Also keytool can be used
     if yum list installed gnutls-utils > /dev/null 2>&1; then
         echo "Running X509 certificate provisioning and export tests"
+
+        echo "Creating X509 certificate chains for testing"
+        create_test_certs
 
         echo "test_x509_single_cert"
         provision_key_w_cert --kms-key-id "$key_id" --kms-region "$region" --key-label "selfsigned"
