@@ -30,10 +30,10 @@ export const getDefaultConfig = (): NitroEnclavesAcmStreamlineConfig => ({
   instanceConfig: {
     instanceName: 'AcmneInstance',
     keyPairName: process.env.KEY_PAIR_NAME || 'my-key-pair-name',
-    serverType: 'APACHE',
+    serverType: 'NGINX',
     amiType: 'AL2023',
     instanceType: 'c5.xlarge',
   },
-  region: process.env.AWS_REGION || 'my-region-1',
+  region: process.env.AWS_REGION || 'us-east-1',
   account: process.env.AWS_ACCOUNT || '123456789',
 });
