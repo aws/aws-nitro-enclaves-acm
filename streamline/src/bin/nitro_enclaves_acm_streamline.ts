@@ -46,7 +46,7 @@ export class NitroEnclavesAcmStreamline {
 
   private createInstanceStack(roleStack: RoleStack): InstanceStack {
     return new InstanceStack(
-      this.app, 
+      this.app,
       `InstanceStack-${this.config.instanceConfig.amiType}-${this.config.instanceConfig.serverType}`,
       {
         env: this.getEnv(),
@@ -57,15 +57,16 @@ export class NitroEnclavesAcmStreamline {
         instanceType: this.config.instanceConfig.instanceType,
         instanceName: this.config.instanceConfig.instanceName || 'AcmneInstance',
         certificateArn: this.certificateArn,
-        domainName: this.config.certificateConfig.domainName
+        domainName: this.config.certificateConfig.domainName,
+        isCertificatePrivate: this.config.certificateConfig.isPrivate,
       }
     );
   }
 
   private getEnv(): { account: string; region: string } {
-    return { 
-      account: this.config.account, 
-      region: this.config.region 
+    return {
+      account: this.config.account,
+      region: this.config.region
     };
   }
 
