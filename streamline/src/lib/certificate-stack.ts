@@ -69,20 +69,18 @@ export class CertificateStack extends cdk.Stack {
       // If route53 is the DNS provider, validation is done automatically
       if (props.hostedZoneId) {
         const hostedZone = route53.HostedZone.fromHostedZoneId(this, 'HostedZone', props?.hostedZoneId!);
-        certificate = new acm.Certificate(this, props?.certificateName || 'AcmCertificate', {
+        certificate = new acm.Certificate(this, props?.certificateName!, {
           domainName: props?.domainName!,
           validation: acm.CertificateValidation.fromDns(hostedZone),
-          // certificateName: props?.certificateName || 'AcmCertificate'
         });
       } else {
-        certificate = new acm.Certificate(this, props?.certificateName || 'AcmCertificate', {
+        certificate = new acm.Certificate(this, props?.certificateName!, {
           domainName: props?.domainName!,
           validation: props?.validationType === 'DNS' ? acm.CertificateValidation.fromDns() : acm.CertificateValidation.fromEmail(),
-          // certificateName: props?.certificateName || 'AcmCertificate'
         });
       }
     } else {
-      certificate = new acm.PrivateCertificate(this, props?.certificateName || 'AcmCertificate', {
+      certificate = new acm.PrivateCertificate(this, props?.certificateName!, {
         domainName: props?.domainName!,
         certificateAuthority: acmpca.CertificateAuthority.fromCertificateAuthorityArn(this, 'CertificateAuthority', props?.pcaArn!),
       });

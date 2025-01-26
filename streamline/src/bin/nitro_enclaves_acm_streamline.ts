@@ -28,7 +28,7 @@ export class NitroEnclavesAcmStreamline {
         hostedZoneId: this.config.certificateConfig.hostedZoneId,
         isPrivate: this.config.certificateConfig.isPrivate,
         pcaArn: this.config.certificateConfig.pcaArn,
-        certificateName: this.config.certificateConfig.certificateName,
+        certificateName: this.config.certificateConfig.certificateName || 'AcmneCertificate',
       });
       this.certificateArn = certificateStack.certificateArn;
     } else {
@@ -41,7 +41,7 @@ export class NitroEnclavesAcmStreamline {
       env: this.getEnv(),
       certificateArn: this.certificateArn,
       region: this.config.region,
-      roleName: this.config.roleConfig?.roleName,
+      roleName: this.config.roleConfig?.roleName || 'AcmneRole',
     });
   }
 
@@ -56,7 +56,7 @@ export class NitroEnclavesAcmStreamline {
         serverType: this.config.instanceConfig.serverType,
         amiType: this.config.instanceConfig.amiType,
         instanceType: this.config.instanceConfig.instanceType,
-        instanceName: this.config.instanceConfig.instanceName,
+        instanceName: this.config.instanceConfig.instanceName || 'AcmneInstance',
         certificateArn: this.certificateArn,
         domainName: this.config.certificateConfig.domainName
       }

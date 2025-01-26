@@ -40,7 +40,6 @@ export class InstanceStack extends cdk.Stack {
     if (!props?.instanceType) {
       throw new Error('instanceType is required in InstanceStack.')
     }
-    // [TODO] validate instanceType to check if 1. it's a valid instance type and 2. supports enclaves
 
     // Step 2: Prepare the enclave-enabled parent instance
     const vpc = ec2.Vpc.fromLookup(this, `DefaultVPC-${props.instanceName}`, { isDefault: true })
@@ -77,7 +76,7 @@ export class InstanceStack extends cdk.Stack {
     const instanceProfile = new iam.InstanceProfile(this, `AcmInstanceProfile-${props.instanceName}`, { role: role });
 
     // Step 2 & Step 6 - Create the enclave-enabled instance with the attached role/instance profile
-    const instance = new ec2.Instance(this, props?.instanceName || `AcmneInstance`, {
+    const instance = new ec2.Instance(this, props?.instanceName!, {
       instanceType: instanceType,
       machineImage: machineImage,
       vpc: vpc,

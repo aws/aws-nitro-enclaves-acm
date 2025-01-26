@@ -31,9 +31,8 @@ export class RoleStack extends cdk.Stack {
         }
 
         // Step 3 - Create the ACM role 
-        const role = new iam.Role(this, props?.roleName || 'AcmRole', {
+        const role = new iam.Role(this, props?.roleName!, {
             assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-            // roleName: props?.roleName || 'AcmRole',
         });
 
         // Step 4 - Associate the certificate with the ACM role
