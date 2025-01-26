@@ -18,7 +18,7 @@ export const getDefaultConfig = (): NitroEnclavesAcmStreamlineConfig => ({
     // validationType: 'DNS', // If using an external DNS provider
     
     // If creating a private certificate
-    pcaArn: process.env.PCA_ARN,
+    pcaArn: process.env.PCA_ARN || 'arn:aws:acm-pca:us-east-1:123456789:certificate-authority/xxx-yyyy',
   },
 
   // Role Configration
