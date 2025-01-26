@@ -14,12 +14,9 @@ export class NitroEnclavesAcmStreamline {
   private readonly config: NitroEnclavesAcmStreamlineConfig;
   private certificateArn: string = '';
 
-  constructor(config: Partial<NitroEnclavesAcmStreamlineConfig> = {}) {
+  constructor(config: NitroEnclavesAcmStreamlineConfig) {
     this.app = new cdk.App();
-    this.config = {
-      ...getDefaultConfig(),
-      ...config
-    };
+    this.config = config;
     ConfigValidator.validate(this.config);
   }
 
@@ -81,6 +78,5 @@ export class NitroEnclavesAcmStreamline {
   }
 }
 
-// Usage
-const streamline = new NitroEnclavesAcmStreamline();
+const streamline = new NitroEnclavesAcmStreamline(getDefaultConfig());
 streamline.deploy();
