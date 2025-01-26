@@ -29,6 +29,7 @@ export class NitroEnclavesAcmStreamline {
         isPrivate: this.config.certificateConfig.isPrivate,
         pcaArn: this.config.certificateConfig.pcaArn,
         certificateName: this.config.certificateConfig.certificateName || 'AcmneCertificate',
+        validationType: this.config.certificateConfig.validationType,
       });
       this.certificateArn = certificateStack.certificateArn;
     } else {
