@@ -31,7 +31,7 @@ export class CertificateStack extends cdk.Stack {
       throw new Error('domainName is required in CertificateStack.');
     }
 
-    if (!props?.isPrivate) {
+    if (props?.isPrivate === undefined) {
       throw new Error('isPrivate is required in CertificateStack.');
     }
 
