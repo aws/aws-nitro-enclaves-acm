@@ -59,7 +59,7 @@ const config: NitroEnclavesAcmStreamlineConfig = {
 Deploy the stacks
 
 ```bash
-cdk deploy --all --require-approval never
+cdk deploy --all
 ```
 ### 2. Public Certificate Deployment (with Route53 as the DNS provider):
 Change the configuration in the [`src/config/default-config.ts`](../src/config/default-config.ts) file.
@@ -78,7 +78,7 @@ const config: NitroEnclavesAcmStreamlineConfig = {
 Deploy the stacks
 
 ```bash
-cdk deploy --all --require-approval never
+cdk deploy --all
 ```
 ### 3. Public Certificate Deployment (with External DNS Provider):
 For external DNS providers, deployment should be done in two steps:
@@ -97,7 +97,7 @@ const initialConfig: NitroEnclavesAcmStreamlineConfig = {
 ```
 ```bash
 # Deploy the certificate stack
-cdk deploy CertificateStack --require-approval never
+cdk deploy CertificateStack
 ```
 - **Step 2:** Update the configuration with the generated certificate ARN
 ```Typescript
@@ -112,7 +112,7 @@ const finalConfig: NitroEnclavesAcmStreamlineConfig = {
 ```
 ```bash
 # Deploy remaining stacks
-cdk deploy RoleStack InstanceStack --require-approval never
+cdk deploy RoleStack InstanceStack
 ```
 
 ### 4. Using an Existing Certificate:
@@ -132,7 +132,7 @@ const config: NitroEnclavesAcmStreamlineConfig = {
 Deploy the stacks
 
 ```bash
-cdk deploy --all --require-approval never
+cdk deploy --all
 ```
 
 ## Deployment
@@ -140,12 +140,12 @@ The stacks can be deployed individually or together based on your needs. Require
 
 ### Deploy all stacks:
 ```bash
-cdk deploy --all --require-approval never
+cdk deploy --all
 ```
 
 ### Deploy individual (or multiple) stacks:
 ```bash
-cdk deploy <stack_name_1> <stack_name_2> ... --require-approval never
+cdk deploy <stack_name_1> <stack_name_2> ...
 ```
 
 ## Cleanup

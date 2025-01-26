@@ -58,7 +58,7 @@ The app consists of **three** main CDK stacks:
 ### Installation
 ```bash
 git clone <repository-url>
-cd aws-nitro-enclaves-acm/streamline
+cd aws-nitro-enclaves-acm/cdk
 npm install
 cdk bootstrap aws://<AWS_ACCOUNT>/<AWS_REGION>
 chmod +x ./acmne-cli
@@ -88,7 +88,7 @@ For a complete list of `acmne-cli` options and their descriptions:
 ``` 
 
 #### CDK CLI
-For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cdk/v2/guide/cli.html)  directly, or for detailed configuration options, please refer to our [CDK Usage Guide](./docs/cdk-usage.md).
+For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cdk/v2/guide/cli.html)  directly, or for detailed configuration options, please refer to our [CDK Usage Guide](../docs/cdk-usage.md).
 
 **Note:** All deployed stacks can be found in the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/home), where you can:
 - View detailed stack outputs
