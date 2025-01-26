@@ -13,7 +13,6 @@ import { Construct } from 'constructs';
 interface RoleStackProps extends cdk.StackProps {
     roleName?: string;
     certificateArn: string;
-    region: string;
 }
 
 export class RoleStack extends cdk.Stack {
@@ -26,7 +25,7 @@ export class RoleStack extends cdk.Stack {
         if (!props?.certificateArn) {
             throw new Error('certificateArn is required in RoleStack.');
         }
-        if (!props?.region) {
+        if (!props?.env?.region) {
             throw new Error('region is required in RoleStack.');
         }
 
@@ -52,7 +51,7 @@ export class RoleStack extends cdk.Stack {
             sid: 'VisualEditor0',
             effect: iam.Effect.ALLOW,
             actions: ['kms:Decrypt'],
-            resources: [`arn:aws:kms:${props?.region}:*:key/${enclaveCertificateIamRoleAssociation.attrEncryptionKmsKeyId}`],
+            resources: [`arn:aws:kms:${props?.env?.region}:*:key/${enclaveCertificateIamRoleAssociation.attrEncryptionKmsKeyId}`],
         }));
 
         role.addToPolicy(new iam.PolicyStatement({

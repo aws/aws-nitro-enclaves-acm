@@ -40,7 +40,6 @@ export class NitroEnclavesAcmStreamline {
     return new RoleStack(this.app, 'RoleStack', {
       env: this.getEnv(),
       certificateArn: this.certificateArn,
-      region: this.config.region,
       roleName: this.config.roleConfig?.roleName || 'AcmneRole',
     });
   }
