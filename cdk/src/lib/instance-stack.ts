@@ -60,12 +60,16 @@ export class InstanceStack extends cdk.Stack {
 
     // Configure instance type
     const instanceType = new ec2.InstanceType(props.instanceType);
+    const isArm = instanceType.architecture === ec2.InstanceArchitecture.ARM_64;
 
     // Configure AMI
     const machineImage = new ec2.AmazonLinuxImage({
       generation: props?.amiType === 'AL2'
         ? ec2.AmazonLinuxGeneration.AMAZON_LINUX_2
-        : ec2.AmazonLinuxGeneration.AMAZON_LINUX_2023
+        : ec2.AmazonLinuxGeneration.AMAZON_LINUX_2023,
+      cpuType: isArm
+        ? ec2.AmazonLinuxCpuType.ARM_64
+        : ec2.AmazonLinuxCpuType.X86_64
     });
 
     // Step 6 - Attach the role to the instance
