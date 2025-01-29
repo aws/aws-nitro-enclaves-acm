@@ -1,6 +1,7 @@
 // config/types.ts
 export interface NitroEnclavesAcmStreamlineConfig {
     certificateConfig: {
+      stackName: string;
       certificateName?: string;
       domainName: string;
       isPrivate: boolean;
@@ -15,9 +16,11 @@ export interface NitroEnclavesAcmStreamlineConfig {
       existingCertificateArn?: string;
     };
     roleConfig?: {
+      stackName: string;
       roleName?: string;
     };
     instanceConfig: {
+      stackName: string;
       instanceName?: string;
       keyPairName: string;
       serverType: 'NGINX' | 'APACHE';

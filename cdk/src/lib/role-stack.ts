@@ -21,21 +21,13 @@ export class RoleStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: RoleStackProps) {
         super(scope, id, props);
 
-        // Props validation 
-        if (!props?.certificateArn) {
-            throw new Error('certificateArn is required in RoleStack.');
-        }
-        if (!props?.env?.region) {
-            throw new Error('region is required in RoleStack.');
-        }
-
         // Step 3 - Create the ACM role 
         const role = new iam.Role(this, props?.roleName!, {
             assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
         });
 
         // Step 4 - Associate the certificate with the ACM role
-        const enclaveCertificateIamRoleAssociation = new ec2.CfnEnclaveCertificateIamRoleAssociation(this, `EnclaveCertificateIamRoleAssociation-${props.roleName}`, {
+        const enclaveCertificateIamRoleAssociation = new ec2.CfnEnclaveCertificateIamRoleAssociation(this, `EnclaveCertificateIamRoleAssociation-${props?.roleName}`, {
             certificateArn: `${props?.certificateArn!}`,
             roleArn: `${role.roleArn}`,
         });

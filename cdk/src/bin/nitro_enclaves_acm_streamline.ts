@@ -12,25 +12,31 @@ require('dotenv').config();
 export class NitroEnclavesAcmStreamline {
   private readonly app: cdk.App;
   private readonly config: NitroEnclavesAcmStreamlineConfig;
+  private readonly isDestroySubcommand: boolean;
   private certificateArn: string = '';
 
-  constructor(config: NitroEnclavesAcmStreamlineConfig) {
+  constructor(config: NitroEnclavesAcmStreamlineConfig, isDestroySubcommand: boolean = false) {
     this.app = new cdk.App();
     this.config = config;
-    ConfigValidator.validate(this.config);
+    this.isDestroySubcommand = isDestroySubcommand;
+    ConfigValidator.validateEnv(this.config, this.isDestroySubcommand);
   }
 
   private createCertificateStack(): void {
     if (!this.config.certificateConfig?.existingCertificateArn) {
-      const certificateStack = new CertificateStack(this.app, 'CertificateStack', {
-        env: this.getEnv(),
-        domainName: this.config.certificateConfig.domainName,
-        hostedZoneId: this.config.certificateConfig.hostedZoneId,
-        isPrivate: this.config.certificateConfig.isPrivate,
-        pcaArn: this.config.certificateConfig.pcaArn,
-        certificateName: this.config.certificateConfig.certificateName || 'AcmneCertificate',
-        validationType: this.config.certificateConfig.validationType,
-      });
+      ConfigValidator.validateCertificateStack(this.config, this.isDestroySubcommand);
+      const certificateStack = new CertificateStack(
+        this.app,
+        this.config.certificateConfig.stackName || 'CertificateStack',
+        {
+          env: this.getEnv(),
+          domainName: this.config.certificateConfig.domainName,
+          hostedZoneId: this.config.certificateConfig.hostedZoneId,
+          isPrivate: this.config.certificateConfig.isPrivate,
+          pcaArn: this.config.certificateConfig.pcaArn,
+          certificateName: this.config.certificateConfig.certificateName || 'AcmneCertificate',
+          validationType: this.config.certificateConfig.validationType,
+        });
       this.certificateArn = certificateStack.certificateArn;
     } else {
       this.certificateArn = this.config.certificateConfig.existingCertificateArn;
@@ -38,17 +44,22 @@ export class NitroEnclavesAcmStreamline {
   }
 
   private createRoleStack(): RoleStack {
-    return new RoleStack(this.app, 'RoleStack', {
-      env: this.getEnv(),
-      certificateArn: this.certificateArn,
-      roleName: this.config.roleConfig?.roleName || 'AcmneRole',
-    });
+    ConfigValidator.validateRoleStack(this.config, this.isDestroySubcommand);
+    return new RoleStack(
+      this.app,
+      this.config.roleConfig?.stackName || 'RoleStack',
+      {
+        env: this.getEnv(),
+        certificateArn: this.certificateArn,
+        roleName: this.config.roleConfig?.roleName || 'AcmneRole',
+      });
   }
 
   private createInstanceStack(roleStack: RoleStack): InstanceStack {
+    ConfigValidator.validateInstanceStack(this.config, this.isDestroySubcommand);
     return new InstanceStack(
       this.app,
-      `InstanceStack-${this.config.instanceConfig.amiType}-${this.config.instanceConfig.serverType}`,
+      `${this.config.instanceConfig.stackName}` || `InstanceStack`,
       {
         env: this.getEnv(),
         roleArn: roleStack.roleArn,

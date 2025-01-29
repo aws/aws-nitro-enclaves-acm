@@ -22,25 +22,8 @@ interface InstanceStackProps extends cdk.StackProps {
 }
 
 export class InstanceStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: InstanceStackProps) {
+  constructor(scope: Construct, id: string, props: InstanceStackProps) {
     super(scope, id, props);
-
-    // Props validation
-    if (!['NGINX', 'APACHE'].includes(props?.serverType!)) {
-      throw new Error('Invalid server type. Must be NGINX or APACHE.')
-    }
-    if (!['AL2', 'AL2023'].includes(props?.amiType!)) {
-      throw new Error('Invalid AMI type. Must be AL2 or AL2023.')
-    }
-    if (!props?.roleArn) {
-      throw new Error('roleArn is required in InstanceStack.')
-    }
-    if (!props?.keyPairName) {
-      throw new Error('keyPairName is required in InstanceStack.')
-    }
-    if (!props?.instanceType) {
-      throw new Error('instanceType is required in InstanceStack.')
-    }
 
     // Step 2: Prepare the enclave-enabled parent instance
     const vpc = ec2.Vpc.fromLookup(this, `DefaultVPC-${props.instanceName}`, { isDefault: true })

@@ -7,14 +7,18 @@ import { NitroEnclavesAcmStreamline } from './nitro_enclaves_acm_streamline';
 const program = new Command();
 
 program
-  .name('acmne-cli')
-  .description('CLI for configuring and deploying the Nitro Enclaves ACM Streamline')
+  .name('setup-tool')
+  .description('CLI tool for configuring and deploying the Nitro Enclaves ACM Setup')
   .version('1.0.0');
 
 program
+  // argument for a subcommand that is either deploy or destroy
+  .argument('<subcommand>', 'Subcommand to execute deploy or destroy (deploy | destroy)')
+  // Setup Name
+  .requiredOption('-S, --setup-name <string>', 'Name of the setup')
   // Certificate config
   .option('-n, --certificate-name <string>', 'Certificate name')
-  .option('-d, --domain-name <string>', 'Domain name for the certificate')
+  .option('-d, --domain-name <string>', 'Domain name for the certificate', 'example.com')
   .option('--is-private', 'Whether the certificate is private')
   .option('-z, --hosted-zone-id <string>', 'Route53 hosted zone ID')
   .option('-v, --validation-type <string>', 'Certificate validation type (DNS or EMAIL)')
@@ -24,17 +28,18 @@ program
   .option('-r, --role-name <string>', 'Role name')
   // Instance config
   .option('-i, --instance-name <string>', 'Instance name')
-  .option('-k, --key-pair-name <string>', 'Key pair name')
-  .option('-s, --server-type <string>', 'Server type (NGINX or APACHE)')
+  .option('-k, --key-pair-name <string>', 'Key pair name', 'my-key-pair-name')
+  .option('-s, --web-server-type <string>', 'Server type (NGINX or APACHE)')
   .option('-t, --instance-type <string>', 'Instance type')
   .option('-m, --ami-type <string>', 'AMI type (AL2 or AL2023)')
   // General config
   .option('-a, --aws-region <string>', 'AWS region')
-  .option('-u, --aws-account <string>', 'AWS account');
+  .option('-u, --aws-account-id <string>', 'AWS account ID')
 
 program.parse(process.argv);
 
 const options = program.opts<{
+  setupName: string;
   // Certificate config
   certificateName?: string;
   domainName: string;
@@ -48,16 +53,17 @@ const options = program.opts<{
   // Instance config
   instanceName?: string;
   keyPairName: string;
-  serverType: 'NGINX' | 'APACHE';
+  webServerType: 'NGINX' | 'APACHE';
   amiType: 'AL2' | 'AL2023';
   instanceType: string;
   // General config
   awsRegion: string;
-  awsAccount: string;
+  awsAccountId: string;
 }>();
 
 const config: NitroEnclavesAcmStreamlineConfig = {
   certificateConfig: {
+    stackName: `${options.setupName!}-CertificateStack`,
     domainName: options.domainName!,
     isPrivate: options.isPrivate || false,
     certificateName: options.certificateName || 'AcmneCertificate',
@@ -67,19 +73,23 @@ const config: NitroEnclavesAcmStreamlineConfig = {
     pcaArn: options.pcaArn,
   },
   roleConfig: {
+    stackName: `${options.setupName!}-RoleStack`,
     roleName: options.roleName || 'AcmneRole',
   },
   instanceConfig: {
+    stackName: `${options.setupName!}-InstanceStack`,
     instanceName: options.instanceName || 'AcmneInstance',
     keyPairName: options.keyPairName!,
     instanceType: options.instanceType || 'c5.xlarge',
-    serverType: options.serverType || 'NGINX',
+    serverType: options.webServerType || 'NGINX',
     amiType: options.amiType || 'AL2023',
   },
   region: options.awsRegion || 'us-east-1',
-  account: options.awsAccount!,
+  account: options.awsAccountId!,
 };
 
+const isDestroySubcommand = program.args[0] === 'destroy';
+
 console.log('ACM for Nitro Enclaves configuration:\n', config)
-const streamline = new NitroEnclavesAcmStreamline(config);
+const streamline = new NitroEnclavesAcmStreamline(config, isDestroySubcommand);
 streamline.deploy();

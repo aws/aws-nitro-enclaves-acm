@@ -6,6 +6,7 @@ require('dotenv').config();
 export const getDefaultConfig = (): NitroEnclavesAcmStreamlineConfig => ({
   // Certificate Configuration
   certificateConfig: {
+    stackName: 'CertificateStack',
     certificateName: 'AcmneCertificate',
     domainName: process.env.DOMAIN_NAME || 'example.com',
     isPrivate: true,
@@ -23,11 +24,13 @@ export const getDefaultConfig = (): NitroEnclavesAcmStreamlineConfig => ({
 
   // Role Configration
   roleConfig: {
+    stackName: 'RoleStack',
     roleName: 'AcmneRole',
   },
 
   // Instance Configuration
   instanceConfig: {
+    stackName: 'InstanceStack',
     instanceName: 'AcmneInstance',
     keyPairName: process.env.KEY_PAIR_NAME || 'my-key-pair-name',
     serverType: 'NGINX',
