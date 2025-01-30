@@ -1,9 +1,9 @@
 # ACM for Nitro Enclaves Streamline
 
-A CDK app that automates the installation and configuration of ACM for Nitro Enclaves on Amazon EC2 instances. This project simplifies the complex [manual installation process](https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html) by providing both a simple CLI tool (`acmne-cli`) and three modular CDK stacks. 
+A CDK app that automates the installation and configuration of ACM for Nitro Enclaves on Amazon EC2 instances. This project simplifies the complex [manual installation process](https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html) by providing both a simple CLI tool (`setup-tool`) and three modular CDK stacks. 
 
 ## Architecture Overview
-The app consists of **three** main CDK stacks:
+The app consists of **three** main CDK stacks, which correspond to the [steps outlined in the AWS documentation](https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html) for manually installing ACM for Nitro Enclaves.
 
 ![nitro_enclaves_acm_streamline](assets/images/nitro_enclaves_acm_streamline.svg)
 
@@ -22,6 +22,7 @@ The app consists of **three** main CDK stacks:
 - Creates and configures the ACM role.
 - Associates the role with the certificate.
 - Manages permissions for certificate and KMS key access.
+- Creates instance profile from the ACM role.
 
 #### Outputs:
 - ACM Role Name and ARN
@@ -36,7 +37,7 @@ The app consists of **three** main CDK stacks:
     - Support for `NGINX` and `Apache` **server types**.
     - Support for `Amazon Linux 2 (AL2)` and `Amazon Linux 2023 (AL2023)` **AMI types**,
     - [**Nitro Enclave compatible instance types**](https://aws.amazon.com/ec2/nitro/nitro-enclaves/faqs/#:~:text=Which%20instance%20types%20are%20supported,with%20only%201%20CPU%20core.) only.
-- Attaches instance profile with ACM role.
+- Attaches instance profile to the instance.
 - Configures the web server to use ACM for Nitro Enclaves.
 
 #### Outputs:
@@ -61,34 +62,72 @@ git clone <repository-url>
 cd aws-nitro-enclaves-acm/cdk
 npm install
 cdk bootstrap aws://<AWS_ACCOUNT>/<AWS_REGION>
-chmod +x ./acmne-cli
+chmod +x ./setup-tool
 ```
 
 ### Usage
-#### CLI Tool
-Our custom CLI tool `acmne-cli` provides a simple one-line command to deploy the complete solution.
+#### CLI Tool `setup-tool`
+The [`setup-tool`](./setup-tool) provides a simple one-line command to deploy or destroy the complete ACM for Nitro Enclaves setup.
 
-##### Example:
+**Available Commands:**
+* `deploy`: Deploy a new ACM setup
+* `destroy`: Destroy one or all existing stacks attached to a setup name
+* `help`: Show command options
+
+#### CDK CLI
+For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cdk/v2/guide/cli.html) directly, or for detailed configuration options, please refer to our [CDK Usage Guide](../docs/cdk-usage.md).
+
+### CLI Tool Examples (`setup-tool`)
+#### Deploy Command Examples:
+**Deployment with the creation of a Private Certificate**
 ```bash
-./acmne-cli \
+./setup-tool deploy \
+  --setup-name my-setup \
   --aws-region <region> \
-  --aws-account <account-id> \ 
+  --aws-account-id <account-id> \ 
   --is-private \
   --pca-arn <pca-arn> \
   --domain-name <your-domain> \
   --key-pair-name <key-pair-name> \
   --instance-type <instance-type> \
   --ami-type <AL2|AL2023> \
-  --server-type <NGINX|APACHE>
+  --web-server-type <NGINX|APACHE>
 ```
 
-For a complete list of `acmne-cli` options and their descriptions:
+**Deployment with an existing ACM Certificate (public)**
 ```bash
-./acmne-cli -h
-``` 
+./setup-tool deploy \
+  --setup-name my-setup \
+  --aws-region <region> \
+  --aws-account-id <account-id> \
+  --domain-name <your-domain> \
+  --certificate-arn arn:aws:acm:<region>:<account-id>:certificate/xxxx-yyy-zz \
+  --key-pair-name <key-pair-name> \
+  --instance-type <instance-type> \
+  --ami-type  <AL2|AL2023> \
+  --web-server-type <NGINX|APACHE>
+```
 
-#### CDK CLI
-For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cdk/v2/guide/cli.html)  directly, or for detailed configuration options, please refer to our [CDK Usage Guide](../docs/cdk-usage.md).
+#### Destroy Command Examples:
+**Destroy all stacks for a setup**
+```bash
+./setup-tool destroy \
+  --setup-name my-setup \
+  --aws-account-id <account-id> \
+  --aws-region <region> \
+  --all
+```
+
+**Destroy specific stack(s)**
+```bash
+./setup-tool destroy \
+  --setup-name my-setup \
+  --aws-account-id <account-id> \
+  --aws-region <region> \
+  --instance-stack
+# --role-stack
+# --certificate-stack
+```
 
 **Note:** All deployed stacks can be found in the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/home), where you can:
 - View detailed stack outputs
