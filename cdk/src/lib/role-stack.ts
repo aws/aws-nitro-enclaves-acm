@@ -16,7 +16,7 @@ interface RoleStackProps extends cdk.StackProps {
 }
 
 export class RoleStack extends cdk.Stack {
-    public readonly roleArn: string;
+    public readonly instanceProfile: iam.InstanceProfile;
 
     constructor(scope: Construct, id: string, props?: RoleStackProps) {
         super(scope, id, props);
@@ -52,8 +52,11 @@ export class RoleStack extends cdk.Stack {
             resources: [`${role.roleArn}`],
         }));
 
-        // Populating roleArn to pass it to external stacks
-        this.roleArn = role.roleArn;
+        // Create Instance Profile from the role
+        const instanceProfile = new iam.InstanceProfile(this, `AcmneInstanceProfile`, { role: role });
+
+        // Populate instanceProfile to pass it to external stacks
+        this.instanceProfile = instanceProfile;
 
         // Role outputs
         new cdk.CfnOutput(this, 'ACMRoleName', { value: role.roleName });

@@ -62,7 +62,7 @@ export class NitroEnclavesAcmStreamline {
       `${this.config.instanceConfig.stackName}` || `InstanceStack`,
       {
         env: this.getEnv(),
-        roleArn: roleStack.roleArn,
+        instanceProfile: roleStack.instanceProfile,
         keyPairName: this.config.instanceConfig.keyPairName,
         serverType: this.config.instanceConfig.serverType,
         amiType: this.config.instanceConfig.amiType,

@@ -11,7 +11,7 @@ import { readFileSync } from 'fs';
 
 interface InstanceStackProps extends cdk.StackProps {
   instanceName?: string;
-  roleArn: string;
+  instanceProfile: iam.InstanceProfile;
   keyPairName: string;
   serverType: 'NGINX' | 'APACHE';
   amiType: 'AL2' | 'AL2023';
@@ -55,10 +55,6 @@ export class InstanceStack extends cdk.Stack {
         : ec2.AmazonLinuxCpuType.X86_64
     });
 
-    // Step 6 - Attach the role to the instance
-    const role = iam.Role.fromRoleArn(this, `ImportedRole-${props.instanceName}`, props?.roleArn!);
-    const instanceProfile = new iam.InstanceProfile(this, `AcmInstanceProfile-${props.instanceName}`, { role: role });
-
     // Step 2 & Step 6 - Create the enclave-enabled instance with the attached role/instance profile
     const instance = new ec2.Instance(this, props?.instanceName!, {
       instanceType: instanceType,
@@ -67,7 +63,7 @@ export class InstanceStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroup: securityGroup,
       keyPair: ec2.KeyPair.fromKeyPairName(this, `KeyPair-${props.instanceName}`, props?.keyPairName!),
-      instanceProfile: instanceProfile,
+      instanceProfile: props.instanceProfile,
       enclaveEnabled: true,
       userData: userData
     });
