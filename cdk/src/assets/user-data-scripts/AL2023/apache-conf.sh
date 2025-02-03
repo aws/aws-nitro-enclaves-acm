@@ -9,10 +9,30 @@ sudo sed -i 's!certificate_arn: ""!certificate_arn: "CERTIFICATE_ARN_PLACEHOLDER
 
 # Generate the /etc/httpd/conf.d/httpd-acm.conf file
 sudo mv /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf-bkp
-printf "Listen 443 https\nSSLPassPhraseDialog exec:/usr/libexec/httpd-ssl-pass-dialog\nSSLCryptoDevice pkcs11\n<VirtualHost *:443>\nServerName DOMAIN_NAME_PLACEHOLDER\nSSLEngine on\nSSLProtocol -all +TLSv1.2\nSSLCertificateKeyFile /etc/pki/tls/private/localhost.key\nSSLCertificateFile /etc/pki/tls/certs/localhost.crt\n</VirtualHost>\n" | sudo tee /etc/httpd/conf.d/httpd-acm.conf
+sudo tee /etc/httpd/conf.d/httpd-acm.conf << 'EOF'
+Listen 443 https
+SSLPassPhraseDialog exec:/usr/libexec/httpd-ssl-pass-dialog
+SSLCryptoDevice pkcs11
+<VirtualHost *:443>
+ServerName DOMAIN_NAME_PLACEHOLDER
+SSLEngine on
+SSLProtocol -all +TLSv1.2
+SSLCertificateKeyFile /etc/pki/tls/private/localhost.key
+SSLCertificateFile /etc/pki/tls/certs/localhost.crt
+</VirtualHost>
+EOF
 
 # Edit the OpenSSL configuration /etc/pki/tls/openssl.cnf
-sudo sed -i '/ssl_conf = ssl_module/a\engines = engine_section\n\n[engine_section]\npkcs11 = pkcs11_section\n\n[ pkcs11_section ]\nengine_id = pkcs11\ninit = 1' /etc/pki/tls/openssl.cnf
+sudo tee -a /etc/pki/tls/openssl.cnf << 'EOF'
+engines = engine_section
+
+[engine_section]
+pkcs11 = pkcs11_section
+
+[ pkcs11_section ]
+engine_id = pkcs11
+init = 1
+EOF
 
 # # Start the ACM for Nitro Enclaves service
 sudo systemctl start nitro-enclaves-acm.service
