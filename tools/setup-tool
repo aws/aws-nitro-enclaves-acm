@@ -1,7 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 VERSION="1.0"
-NAME="acmne-setup-tool"
+NAME="setup-tool"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "${SCRIPT_DIR}/.." && pwd )"
+CLI_PATH="${PROJECT_ROOT}/cdk/src/bin/cli.ts"
 
 # Enhanced utility functions
 say() {
@@ -56,17 +59,24 @@ validate_setup_name() {
 # Deploy command implementation
 run_deploy_command() {
     local setup_name=""
-    local args="$*"
+    local require_approval=()
+    local filtered_args=()
     
-    # Extract setup name from arguments if present
+    # Extract setup name and require-approval from arguments if present
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --setup-name)
                 setup_name="$2"
                 validate_setup_name "$setup_name"
+                filtered_args+=("$1" "$2")
+                shift 2
+                ;;
+            --require-approval)
+                require_approval=(--require-approval "$2")
                 shift 2
                 ;;
             *)
+                filtered_args+=("$1")
                 shift
                 ;;
         esac
@@ -74,10 +84,13 @@ run_deploy_command() {
     
     [[ -n "$setup_name" ]] && say "Deploying setup: ${setup_name}"
     
-    CLI_COMMAND="npx ts-node --prefer-ts-exts src/bin/cli.ts ${args}"
+    CLI_COMMAND="npx ts-node --prefer-ts-exts ${CLI_PATH} ${filtered_args[*]}"
     
-    cdk deploy --all --app \""${CLI_COMMAND}"\"
+    cd "${PROJECT_ROOT}/cdk" || die "Failed to change directory to cdk"
+    say "Executing: cdk deploy --all ${require_approval[*]} --app \"${CLI_COMMAND}\""
+    cdk deploy --all "${require_approval[@]}" --app \""${CLI_COMMAND}"\"
     ok_or_die "Failed to deploy"
+    cd - > /dev/null || die "Failed to change back to original directory"
 
     [[ -n "$setup_name" ]] && say "Successfully deployed stacks for setup: ${setup_name}"
 }
@@ -113,8 +126,6 @@ run_destroy_command() {
         ((i++))
     done
 
-    CLI_COMMAND=\""npx ts-node --prefer-ts-exts src/bin/cli.ts ${filtered_args[*]}"\"
-
     say "Destroying specific stacks for setup: ${setup_name}"
     
     local stacks_to_destroy=()
@@ -133,17 +144,20 @@ run_destroy_command() {
         die "No stacks specified for destruction"
     fi
 
+    CLI_COMMAND=\""npx ts-node --prefer-ts-exts ${CLI_PATH} ${filtered_args[*]}"\"
+
+    cd "${PROJECT_ROOT}/cdk" || die "Failed to change directory to cdk"
     # Join stack names with spaces
     say "Executing: cdk destroy --app ${CLI_COMMAND} ${stacks_to_destroy[*]}"
     cdk destroy --app "${CLI_COMMAND}" "${stacks_to_destroy[@]}"
-    
     ok_or_die "Failed to destroy stack(s)"
     say "Success!"
+    cd - > /dev/null || die "Failed to change back to original directory"
 }
 
 parse_deploy_args() {
     if [ -z "$2" ] || [ "$2" == "-h" ] || [ "$2" == "--help" ]; then
-        npx ts-node --prefer-ts-exts src/bin/cli.ts -h
+        npx ts-node --prefer-ts-exts "${CLI_PATH}" -h
         die -c 0
     fi
     run_deploy_command "$@"

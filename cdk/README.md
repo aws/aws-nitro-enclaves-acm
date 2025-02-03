@@ -61,13 +61,12 @@ The app consists of **three** main CDK stacks, which correspond to the [steps ou
 git clone <repository-url>
 cd aws-nitro-enclaves-acm/cdk
 npm install
-cdk bootstrap aws://<AWS_ACCOUNT>/<AWS_REGION>
-chmod +x ./setup-tool
+cdk bootstrap aws://<AWS_ACCOUNT_ID>/<AWS_REGION>
 ```
 
 ### Usage
 #### CLI Tool `setup-tool`
-The [`setup-tool`](./setup-tool) provides a simple one-line command to deploy or destroy the complete ACM for Nitro Enclaves setup.
+The [`setup-tool`](../tools/setup-tool) provides a simple one-line command to deploy or destroy the complete ACM for Nitro Enclaves setup.
 
 **Available Commands:**
 * `deploy`: Deploy a new ACM setup
@@ -81,7 +80,7 @@ For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cd
 #### Deploy Command Examples:
 **Deployment with the creation of a Private Certificate**
 ```bash
-./setup-tool deploy \
+path/to/setup-tool deploy \
   --setup-name my-setup \
   --aws-region <region> \
   --aws-account-id <account-id> \ 
@@ -96,7 +95,7 @@ For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cd
 
 **Deployment with an existing ACM Certificate (public)**
 ```bash
-./setup-tool deploy \
+path/to/setup-tool deploy \
   --setup-name my-setup \
   --aws-region <region> \
   --aws-account-id <account-id> \
@@ -108,10 +107,15 @@ For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cd
   --web-server-type <NGINX|APACHE>
 ```
 
+**Note:** The `--require-approval` flag can be added to the deploy command arguments to control approval requirements, as specified in the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy) by appending:
+```bash
+--require-approval LEVEL (never|any-change|broadening)
+```
+
 #### Destroy Command Examples:
 **Destroy all stacks for a setup**
 ```bash
-./setup-tool destroy \
+path/to/setup-tool destroy \
   --setup-name my-setup \
   --aws-account-id <account-id> \
   --aws-region <region> \
@@ -120,7 +124,7 @@ For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cd
 
 **Destroy specific stack(s)**
 ```bash
-./setup-tool destroy \
+path/to/setup-tool destroy \
   --setup-name my-setup \
   --aws-account-id <account-id> \
   --aws-region <region> \
