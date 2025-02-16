@@ -36,7 +36,7 @@ The app consists of **three** main CDK stacks, which correspond to the [steps ou
     - Default VPC, public subnet and security group configuration.
     - Support for `NGINX` and `Apache` **server types**.
     - Support for `Amazon Linux 2 (AL2)` and `Amazon Linux 2023 (AL2023)` **AMI types**,
-    - [**Nitro Enclave compatible instance types**](https://aws.amazon.com/ec2/nitro/nitro-enclaves/faqs/#:~:text=Which%20instance%20types%20are%20supported,with%20only%201%20CPU%20core.) only.
+    - [**Nitro Enclave compatible instance types**](https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave.html#nitro-enclave-reqs).
 - Attaches instance profile to the instance.
 - Configures the web server to use ACM for Nitro Enclaves.
 
@@ -52,6 +52,7 @@ The app consists of **three** main CDK stacks, which correspond to the [steps ou
 ## Prerequisites
 - NPM
 - [AWS CDK CLI](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html) installed & AWS credentials configured.
+- [EC2 Keypair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html)
 - Domain name, if creating a new certificate. Otherwise, the `existingCertificateArn` to bypass certificate creation.
 - For **private certificates**: An AWS Private Certificate Authority (PCA)
 
@@ -82,13 +83,13 @@ For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cd
 ```bash
 path/to/setup-tool deploy \
   --setup-name my-setup \
-  --aws-region <region> \
+  --aws-region <region> \  #(e.g. us-east-1)
   --aws-account-id <account-id> \ 
   --is-private \
   --pca-arn <pca-arn> \
   --domain-name <your-domain> \
   --key-pair-name <key-pair-name> \
-  --instance-type <instance-type> \
+  --instance-type <instance-type> \  #(e.g. c5.2xlarge)
   --ami-type <AL2|AL2023> \
   --web-server-type <NGINX|APACHE>
 ```
@@ -97,12 +98,12 @@ path/to/setup-tool deploy \
 ```bash
 path/to/setup-tool deploy \
   --setup-name my-setup \
-  --aws-region <region> \
+  --aws-region <region> \  #(e.g. us-east-1)
   --aws-account-id <account-id> \
   --domain-name <your-domain> \
   --certificate-arn arn:aws:acm:<region>:<account-id>:certificate/xxxx-yyy-zz \
   --key-pair-name <key-pair-name> \
-  --instance-type <instance-type> \
+  --instance-type <instance-type> \  #(e.g. c5.2xlarge)
   --ami-type  <AL2|AL2023> \
   --web-server-type <NGINX|APACHE>
 ```
