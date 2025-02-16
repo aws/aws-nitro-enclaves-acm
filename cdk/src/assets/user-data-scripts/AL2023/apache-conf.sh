@@ -22,18 +22,7 @@ SSLCertificateFile /etc/pki/tls/certs/localhost.crt
 </VirtualHost>
 EOF
 
-# Edit the OpenSSL configuration /etc/pki/tls/openssl.cnf
-sudo tee -a /etc/pki/tls/openssl.cnf << 'EOF'
-engines = engine_section
 
-[engine_section]
-pkcs11 = pkcs11_section
-
-[ pkcs11_section ]
-engine_id = pkcs11
-init = 1
-EOF
-
-# # Start the ACM for Nitro Enclaves service
+# Start the ACM for Nitro Enclaves service
 sudo systemctl start nitro-enclaves-acm.service
 sudo systemctl enable nitro-enclaves-acm
