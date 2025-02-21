@@ -36,6 +36,7 @@ export const getDefaultConfig = (): NitroEnclavesAcmStreamlineConfig => ({
     serverType: 'NGINX',
     amiType: 'AL2023',
     instanceType: 'c5.xlarge',
+    encryptVolume: false,
   },
   region: process.env.AWS_REGION || 'us-east-1',
   account: process.env.AWS_ACCOUNT || '123456789',

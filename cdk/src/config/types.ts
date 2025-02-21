@@ -26,6 +26,7 @@ export interface NitroEnclavesAcmStreamlineConfig {
       serverType: 'NGINX' | 'APACHE';
       amiType: 'AL2' | 'AL2023';
       instanceType: string;
+      encryptVolume: boolean;
     };
     region: string;
     account: string;

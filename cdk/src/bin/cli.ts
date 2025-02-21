@@ -32,6 +32,7 @@ program
   .option('-s, --web-server-type <string>', 'Server type (NGINX or APACHE)')
   .option('-t, --instance-type <string>', 'Instance type')
   .option('-m, --ami-type <string>', 'AMI type (AL2 or AL2023)')
+  .option('-e, --encrypt-volume', 'Encrypt root EBS storage volume ')
   // General config
   .option('-a, --aws-region <string>', 'AWS region')
   .option('-u, --aws-account-id <string>', 'AWS account ID')
@@ -56,6 +57,7 @@ const options = program.opts<{
   webServerType: 'NGINX' | 'APACHE';
   amiType: 'AL2' | 'AL2023';
   instanceType: string;
+  encryptVolume: boolean;
   // General config
   awsRegion: string;
   awsAccountId: string;
@@ -83,6 +85,7 @@ const config: NitroEnclavesAcmStreamlineConfig = {
     instanceType: options.instanceType || 'c5.xlarge',
     serverType: options.webServerType || 'NGINX',
     amiType: options.amiType || 'AL2023',
+    encryptVolume: options.encryptVolume || false,
   },
   region: options.awsRegion || 'us-east-1',
   account: options.awsAccountId!,

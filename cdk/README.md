@@ -91,10 +91,11 @@ path/to/setup-tool deploy \
   --key-pair-name <key-pair-name> \
   --instance-type <instance-type> \  #(e.g. c5.2xlarge)
   --ami-type <AL2|AL2023> \
-  --web-server-type <NGINX|APACHE>
+  --web-server-type <NGINX|APACHE> \
+  --encrypt-volume # (Optional - encrypts root EBS storage volume)
 ```
 
-**Deployment with an existing ACM Certificate (public)**
+**Deployment with an existing ACM Certificate (public certificate in this example)**
 ```bash
 path/to/setup-tool deploy \
   --setup-name my-setup \
@@ -105,10 +106,11 @@ path/to/setup-tool deploy \
   --key-pair-name <key-pair-name> \
   --instance-type <instance-type> \  #(e.g. c5.2xlarge)
   --ami-type  <AL2|AL2023> \
-  --web-server-type <NGINX|APACHE>
+  --web-server-type <NGINX|APACHE> \
+  --encrypt-volume # (Optional - encrypts root EBS storage volume)
 ```
 
-**Note:** The `--require-approval` flag can be added to the deploy command arguments to control approval requirements, as specified in the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy) by appending:
+**Note:** The (optional) `--require-approval` flag can be added to the deploy command arguments to control approval requirements, as specified in the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy) by appending:
 ```bash
 --require-approval LEVEL (never|any-change|broadening)
 ```

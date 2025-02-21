@@ -71,6 +71,7 @@ export class NitroEnclavesAcmStreamline {
         certificateArn: this.certificateArn,
         domainName: this.config.certificateConfig.domainName,
         isCertificatePrivate: this.config.certificateConfig.isPrivate,
+        encryptVolume: this.config.instanceConfig.encryptVolume,
       }
     );
   }

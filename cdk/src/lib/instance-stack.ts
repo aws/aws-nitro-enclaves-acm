@@ -19,6 +19,7 @@ interface InstanceStackProps extends cdk.StackProps {
   certificateArn: string;
   domainName: string;
   isCertificatePrivate: boolean;
+  encryptVolume: boolean;
 }
 
 export class InstanceStack extends cdk.Stack {
@@ -65,6 +66,17 @@ export class InstanceStack extends cdk.Stack {
       keyPair: ec2.KeyPair.fromKeyPairName(this, `KeyPair-${props.instanceName}`, props?.keyPairName!),
       instanceProfile: props.instanceProfile,
       enclaveEnabled: true,
+      blockDevices: [
+        {
+          deviceName: '/dev/xvda',
+          volume: ec2.BlockDeviceVolume.ebs(
+            8, // Default volume size
+            { 
+              encrypted: props.encryptVolume,
+            }
+          ),
+        },
+      ],
       userData: userData
     });
 
