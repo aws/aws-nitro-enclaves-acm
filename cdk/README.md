@@ -41,7 +41,7 @@ The app consists of **three** main CDK stacks, which correspond to the [steps ou
 - Configures the web server to use ACM for Nitro Enclaves.
 
 #### Outputs:
-- Synthesized **SSH Connection String**
+- Synthesized **AWS SSM Connection String** (or **SSH Connection String**)
 - Instance ID
 - Instance Public IP
 - Instance Public DNS Name
@@ -110,10 +110,12 @@ path/to/setup-tool deploy \
   --encrypt-volume # (Optional - encrypts root EBS storage volume)
 ```
 
-**Note:** The (optional) `--require-approval` flag can be added to the deploy command arguments to control approval requirements, as specified in the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy) by appending:
+**Notes:** 
+- The (optional) `--require-approval` flag can be added to the deploy command arguments to control approval requirements, as specified in the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy) by appending:
 ```bash
 --require-approval LEVEL (never|any-change|broadening)
 ```
+- While SSH access can be enabled using the (optional) `--allow-ssh-port` flag, **it is not recommended**. Instead, it is **recommended to use [AWS Systems Manager (SSM) Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) for secure instance access**. 
 
 #### Destroy Command Examples:
 **Destroy all stacks for a setup**

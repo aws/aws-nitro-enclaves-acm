@@ -33,6 +33,7 @@ program
   .option('-t, --instance-type <string>', 'Instance type')
   .option('-m, --ami-type <string>', 'AMI type (AL2 or AL2023)')
   .option('-e, --encrypt-volume', 'Encrypt root EBS storage volume ')
+  .option('-o, --allow-ssh-port', 'Allow SSH access (port 22) in the security group of the new EC2 instance.')
   // General config
   .option('-a, --aws-region <string>', 'AWS region')
   .option('-u, --aws-account-id <string>', 'AWS account ID')
@@ -58,6 +59,7 @@ const options = program.opts<{
   amiType: 'AL2' | 'AL2023';
   instanceType: string;
   encryptVolume: boolean;
+  allowSshPort: boolean;
   // General config
   awsRegion: string;
   awsAccountId: string;
@@ -86,6 +88,7 @@ const config: NitroEnclavesAcmStreamlineConfig = {
     serverType: options.webServerType || 'NGINX',
     amiType: options.amiType || 'AL2023',
     encryptVolume: options.encryptVolume || false,
+    allowSSHPort: options.allowSshPort || false,
   },
   region: options.awsRegion || 'us-east-1',
   account: options.awsAccountId!,

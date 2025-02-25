@@ -27,6 +27,7 @@ export interface NitroEnclavesAcmStreamlineConfig {
       amiType: 'AL2' | 'AL2023';
       instanceType: string;
       encryptVolume: boolean;
+      allowSSHPort: boolean;
     };
     region: string;
     account: string;

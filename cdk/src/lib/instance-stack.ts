@@ -20,6 +20,7 @@ interface InstanceStackProps extends cdk.StackProps {
   domainName: string;
   isCertificatePrivate: boolean;
   encryptVolume: boolean;
+  allowSSHPort: boolean;
 }
 
 export class InstanceStack extends cdk.Stack {
@@ -35,9 +36,11 @@ export class InstanceStack extends cdk.Stack {
       allowAllOutbound: true
     });
 
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH Access');
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP Access');
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'Allow HTTPS Access');
+    if (props.allowSSHPort) {
+      securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH Access');
+    }
 
     // Configure user data (startup commands) based on AMI type and server type
     const userData = ec2.UserData.custom(this.getUserDataConfig(props));
@@ -87,7 +90,11 @@ export class InstanceStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'keyPairName', { value: props?.keyPairName });
     new cdk.CfnOutput(this, 'serverType', { value: props?.serverType })
     new cdk.CfnOutput(this, 'amiType', { value: props?.amiType })
-    new cdk.CfnOutput(this, 'SSH connection string', { value: `ssh -i ${props?.keyPairName!}.pem ec2-user@${instance.instancePublicDnsName}` });
+    if (props.allowSSHPort){
+      new cdk.CfnOutput(this, 'SSH connection string', { value: `ssh -i ${props?.keyPairName!}.pem ec2-user@${instance.instancePublicDnsName}` });
+    } else {
+      new cdk.CfnOutput(this, 'AWS SSM connection string', { value: `aws ssm start-session --target ${instance.instanceId}` });
+    }
   }
   // Get commands for user data 
   private getUserDataConfig(props: InstanceStackProps, userDataScriptsFolder: string = 'src/assets/user-data-scripts'): string {

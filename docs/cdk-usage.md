@@ -6,6 +6,7 @@ This guide covers advanced deployment scenarios using [CDK CLI](https://docs.aws
 ```typescript
 interface NitroEnclavesAcmStreamlineConfig {
   certificateConfig: {
+    stackName: string,
     certificateName?: string;
     domainName: string;
     isPrivate: boolean;
@@ -15,14 +16,18 @@ interface NitroEnclavesAcmStreamlineConfig {
     existingCertificateArn?: string;
   };
   roleConfig?: {
+    stackName: string,
     roleName?: string;
   };
   instanceConfig: {
+    stackName: string,
     instanceName?: string;
     keyPairName: string;
     serverType: 'NGINX' | 'APACHE';
     amiType: 'AL2' | 'AL2023';
     instanceType: string;
+    encryptVolume: boolean,
+    allowSSHPort: boolean,
   };
   region: string;
   account: string;
@@ -36,20 +41,25 @@ Change the configuration in the [`src/config/default-config.ts`](../src/config/d
 ```typescript
 const config: NitroEnclavesAcmStreamlineConfig = {
   certificateConfig: {
+    stackName: 'CertificateStack',
     certificateName: 'PrivateAcmneCertificate',
     domainName: 'private.example.com',
     isPrivate: true,
     pcaArn: 'arn:aws:acm-pca:my-region-1:123456789:certificate-authority/xxx-yyyy'
   },
   roleConfig: {
+    stackName: 'RoleStack',
     roleName: 'PrivateAcmneRole'
   },
   instanceConfig: {
+    stackName: 'InstanceStack',
     instanceName: 'PrivateAcmneInstance',
     keyPairName: 'my-private-key',
     serverType: 'NGINX',
     amiType: 'AL2',
     instanceType: 'c5.xlarge'
+    encryptVolume: false,
+    allowSSHPort: false,
   },
   region: 'my-region-1',
   account: '123456789'

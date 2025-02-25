@@ -72,6 +72,7 @@ export class NitroEnclavesAcmStreamline {
         domainName: this.config.certificateConfig.domainName,
         isCertificatePrivate: this.config.certificateConfig.isPrivate,
         encryptVolume: this.config.instanceConfig.encryptVolume,
+        allowSSHPort: this.config.instanceConfig.allowSSHPort,
       }
     );
   }
