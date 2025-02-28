@@ -8,7 +8,7 @@ export interface NitroEnclavesAcmStreamlineConfig {
       // If using a public certificate
       hostedZoneId?: string; // If Route53 is the DNS provider
       validationType?: 'DNS' | 'EMAIL'; // If using an external DNS provider
-      
+
       // If using a private certificate
       pcaArn?: string;
 
@@ -32,4 +32,3 @@ export interface NitroEnclavesAcmStreamlineConfig {
     region: string;
     account: string;
   }
-  

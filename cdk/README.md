@@ -1,6 +1,6 @@
 # ACM for Nitro Enclaves Streamline
 
-A CDK app that automates the installation and configuration of ACM for Nitro Enclaves on Amazon EC2 instances. This project simplifies the complex [manual installation process](https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html) by providing both a simple CLI tool (`setup-tool`) and three modular CDK stacks. 
+A CDK app that automates the installation and configuration of ACM for Nitro Enclaves on Amazon EC2 instances. This project simplifies the complex [manual installation process](https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html) by providing both a simple CLI tool (`setup-tool`) and three modular CDK stacks.
 
 ## Architecture Overview
 The app consists of **three** main CDK stacks, which correspond to the [steps outlined in the AWS documentation](https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html) for manually installing ACM for Nitro Enclaves.
@@ -15,7 +15,7 @@ The app consists of **three** main CDK stacks, which correspond to the [steps ou
 
 #### Outputs:
 - Domain Name
-- Certificate ARN 
+- Certificate ARN
 
 ### 2. Role Stack (Steps 3, 4, 5)
 #### Purpose:
@@ -84,7 +84,7 @@ For advanced deployment scenarios using [CDK CLI](https://docs.aws.amazon.com/cd
 path/to/setup-tool deploy \
   --setup-name my-setup \
   --aws-region <region> \  #(e.g. us-east-1)
-  --aws-account-id <account-id> \ 
+  --aws-account-id <account-id> \
   --is-private \
   --pca-arn <pca-arn> \
   --domain-name <your-domain> \
@@ -110,12 +110,12 @@ path/to/setup-tool deploy \
   --encrypt-volume # (Optional - encrypts root EBS storage volume)
 ```
 
-**Notes:** 
+**Notes:**
 - The (optional) `--require-approval` flag can be added to the deploy command arguments to control approval requirements, as specified in the [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/v2/guide/cli.html#cli-deploy) by appending:
 ```bash
 --require-approval LEVEL (never|any-change|broadening)
 ```
-- While SSH access can be enabled using the (optional) `--allow-ssh-port` flag, **it is not recommended**. Instead, it is **recommended to use [AWS Systems Manager (SSM) Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) for secure instance access**. 
+- While SSH access can be enabled using the (optional) `--allow-ssh-port` flag, **it is not recommended**. Instead, it is **recommended to use [AWS Systems Manager (SSM) Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) for secure instance access**.
 
 #### Destroy Command Examples:
 **Destroy all stacks for a setup**

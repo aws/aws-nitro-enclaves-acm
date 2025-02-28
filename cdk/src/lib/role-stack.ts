@@ -21,7 +21,7 @@ export class RoleStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: RoleStackProps) {
         super(scope, id, props);
 
-        // Step 3 - Create the ACM role 
+        // Step 3 - Create the ACM role
         const role = new iam.Role(this, props?.roleName!, {
             assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
         });

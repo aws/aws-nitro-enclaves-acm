@@ -13,11 +13,11 @@ export const getDefaultConfig = (): NitroEnclavesAcmStreamlineConfig => ({
 
     // If using an existing ACM certificate
     // existingCertificateArn: process.env.CERTIFICATE_ARN || 'arn:aws:acm:my-region-1:123456789:certificate/xxx-yyyy',
-    
+
     // If creating a public certificate
     // hostedZoneId: process.env.HOSTED_ZONE_ID || 'Z123456789', // If Route53 is the DNS provider
     // validationType: 'DNS', // If using an external DNS provider
-    
+
     // If creating a private certificate
     pcaArn: process.env.PCA_ARN || 'arn:aws:acm-pca:us-east-1:123456789:certificate-authority/xxx-yyyy',
   },

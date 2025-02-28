@@ -166,5 +166,5 @@ cdk destroy --all
 
 ### Cleanup an individual stack:
 ```bash
-cdk destroy <stack_name> 
+cdk destroy <stack_name>
 ```

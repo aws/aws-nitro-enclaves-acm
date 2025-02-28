@@ -61,7 +61,7 @@ run_deploy_command() {
     local setup_name=""
     local require_approval=()
     local filtered_args=()
-    
+
     # Extract setup name and require-approval from arguments if present
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -81,11 +81,11 @@ run_deploy_command() {
                 ;;
         esac
     done
-    
+
     [[ -n "$setup_name" ]] && say "Deploying setup: ${setup_name}"
-    
+
     CLI_COMMAND="npx ts-node --prefer-ts-exts ${CLI_PATH} ${filtered_args[*]}"
-    
+
     cd "${PROJECT_ROOT}/cdk" || die "Failed to change directory to cdk"
     say "Executing: cdk deploy --all ${require_approval[*]} --app \"${CLI_COMMAND}\""
     cdk deploy --all "${require_approval[@]}" --app \""${CLI_COMMAND}"\"
@@ -107,9 +107,9 @@ run_destroy_command() {
     if [[ $# -gt 3 ]]; then
         filtered_args=("${@:1:$#-3}")
     fi
-    
+
     # Last 3 arguments are the flags
-    destroy_certificate="${*: -3:1}" 
+    destroy_certificate="${*: -3:1}"
     destroy_role="${*: -2:1}"
     destroy_instance="${*: -1:1}"
 
@@ -127,7 +127,7 @@ run_destroy_command() {
     done
 
     say "Destroying specific stacks for setup: ${setup_name}"
-    
+
     local stacks_to_destroy=()
     # Build list of stacks to destroy
     if [[ "$destroy_instance" == true ]]; then
@@ -215,14 +215,14 @@ show_help() {
     say "Usage: $(basename "$0") <command> [options]"
     say "Commands:"
     say "       deploy    Deploy a new ACM setup"
-    say "           --help                  Show the deploy options" 
+    say "           --help                  Show the deploy options"
     say "       destroy   Destroy one or all existing stacks attached to a setup name"
     say "           --setup-name <name>                 Name of the setup to destroy"
     say "           --aws-account-id <aws_account_id>   AWS Account ID"
     say "           --aws-region <aws_region>           AWS Region"
-    say "           --certificate-stack                 Destroy the certificate stack attached to the provided setup name" 
-    say "           --role-stack                        Destroy the role stack attached to the provided setup name" 
-    say "           --instance-stack                    Destroy the instance stack belonging attached to the provided setup name" 
+    say "           --certificate-stack                 Destroy the certificate stack attached to the provided setup name"
+    say "           --role-stack                        Destroy the role stack attached to the provided setup name"
+    say "           --instance-stack                    Destroy the instance stack belonging attached to the provided setup name"
     say "           --all                               Destroy all stacks attached to the provided setup name"
     say "       help      Show this help message"
 }

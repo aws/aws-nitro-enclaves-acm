@@ -5,7 +5,7 @@ import * as acmpca from 'aws-cdk-lib/aws-acmpca';
 import { Construct } from 'constructs';
 
 /*
-  Step 1 - Create the ACM certificate: https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html#create-cert 
+  Step 1 - Create the ACM certificate: https://docs.aws.amazon.com/enclaves/latest/user/install-acm.html#create-cert
 */
 
 interface CertificateStackProps extends cdk.StackProps {

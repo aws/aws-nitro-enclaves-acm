@@ -74,7 +74,7 @@ export class InstanceStack extends cdk.Stack {
           deviceName: '/dev/xvda',
           volume: ec2.BlockDeviceVolume.ebs(
             8, // Default volume size
-            { 
+            {
               encrypted: props.encryptVolume,
             }
           ),
@@ -96,7 +96,7 @@ export class InstanceStack extends cdk.Stack {
       new cdk.CfnOutput(this, 'AWS SSM connection string', { value: `aws ssm start-session --target ${instance.instanceId}` });
     }
   }
-  // Get commands for user data 
+  // Get commands for user data
   private getUserDataConfig(props: InstanceStackProps, userDataScriptsFolder: string = 'src/assets/user-data-scripts'): string {
     const mainConfig = readFileSync(`${userDataScriptsFolder}/${props.amiType}/${props.serverType.toLowerCase()}-conf.sh`, 'utf8')
     const privateCertConfig = props.isCertificatePrivate ? readFileSync(`${userDataScriptsFolder}/private-cert-conf.sh`, 'utf8') : ''
