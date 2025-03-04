@@ -12,6 +12,10 @@ be mostly transparent to the developer, and employed via the omnitool at
 
 The user guide for the ACM for Nitro Enclaves can be found at https://docs.aws.amazon.com/enclaves/latest/user/nitro-enclave-refapp.html.
 
+### Using AWS CDK
+
+For automated deployment using AWS CDK, please refer to the [CDK deployment guide](cdk/README.md).
+
 # Managed tokens
 
 Each token can store an end-entity private key and its associated ACM certificate chain. Up to 128 SSL/TLS X.509 ACM certificates can be managed via provisioned tokens by the nitro-enclaves-acm service.
