@@ -29,8 +29,6 @@ pub mod defs {
     pub const SERVICE_HTTPD: &str = "httpd";
     pub const HTTPD_OVERRIDE_DATA: &str =
         "[Service]\nType=forking\nExecStart=\nExecStart=/usr/sbin/httpd $OPTIONS -k start\n";
-    pub const HTTPD_OVERRIDE_DIR: &str = "/etc/systemd/system/httpd.service.d/";
-    pub const HTTPD_OVERRIDE_FILE: &str = "/etc/systemd/system/httpd.service.d/httpd.conf";
 
     pub const DEFAULT_CONFIG_PATH: &str = "/etc/nitro_enclaves/acm.yaml";
     pub const DEFAULT_EIF_PATH: &str = "/usr/share/nitro_enclaves/p11ne/p11ne.eif";

@@ -9,7 +9,7 @@ use crate::config;
 use crate::gdata;
 use crate::imds;
 use crate::util::{
-    interruptible_sleep, is_service_running, service_restart, service_start, SystemdError,
+    interruptible_sleep, reload_systemd_daemon, is_service_running, service_restart, service_start, SystemdError,
 };
 use crate::{enclave, enclave::P11neEnclave};
 use log::{debug, error, info, warn};
@@ -152,6 +152,34 @@ impl Agent {
     }
 }
 
+#[derive(Debug)]
+enum ConfigOverrideError {
+    IOError(std::io::Error),
+    DaemonReloadError(SystemdError)
+}
+
+fn override_service_config(service: &str, config_string: &str) -> Result<(), ConfigOverrideError> {
+        let dir = format!("/etc/systemd/system/{}.service.d", service);
+        let fpath = format!("{}/{}.conf", dir, service);
+
+        if Path::new(&fpath).exists() {
+            debug!("Not creating a config override since it already exists");
+        } else {
+            create_dir_all(&dir).map_err(|err| ConfigOverrideError::IOError(err))?;
+            let mut file = OpenOptions::new()
+                            .create_new(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(fpath)
+                            .map_err(|err| ConfigOverrideError::IOError(err))?;
+            file.write_all(config_string.as_bytes()).map_err(|err| ConfigOverrideError::IOError(err))?;
+
+            reload_systemd_daemon().map_err(|err| ConfigOverrideError::DaemonReloadError(err))?;
+        }
+
+        Ok(())
+    }
+
 impl PostSyncAction {
     fn execute(&self, options: &config::Options) {
         info!(
@@ -162,15 +190,16 @@ impl PostSyncAction {
             options.sync_interval_secs
         );
         match self {
-            Self::RestartNginx => Self::restart_webserver("nginx.service", options.reload_wait_ms),
-            Self::RestartHttpd => Self::restart_webserver("httpd.service", options.reload_wait_ms),
+            Self::RestartNginx => Self::restart_webserver("nginx", options.reload_wait_ms, None),
+            Self::RestartHttpd => Self::restart_webserver("httpd", options.reload_wait_ms, Some(defs::HTTPD_OVERRIDE_DATA)),
         }
     }
 
-    fn restart_webserver(service_name: &str, wait_ms: u64) {
+    fn restart_webserver(service: &str, wait_ms: u64, service_config_override: Option<&str>) {
+        let service_name = format!("{}.service", service);
         info!("Restarting {}.", service_name);
 
-        if let Ok(pid) = is_service_running(service_name) {
+        if let Ok(pid) = is_service_running(&service_name) {
             debug!("Sending SIGWINCH to PID={}", pid);
             //http://nginx.org/en/docs/control.html
             //https://httpd.apache.org/docs/2.4/stopping.html#gracefulstop
@@ -185,7 +214,13 @@ impl PostSyncAction {
             info!("{} service is not running", service_name);
         }
 
-        service_restart(service_name).unwrap_or_else(|err| {
+        if let Some(config_str) = service_config_override {
+            if let Err(override_err) = override_service_config(service, config_str) {
+                error!("Can't override the {} systemd service config: {:?}", service, override_err);
+            }
+        };
+
+        service_restart(&service_name).unwrap_or_else(|err| {
             error!("Unable to restart {}: {:?}", service_name, err);
         });
     }

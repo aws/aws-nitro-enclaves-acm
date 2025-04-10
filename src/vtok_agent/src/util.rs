@@ -118,6 +118,20 @@ fn service_exec(arg1: &str, arg2: &str) -> Result<(), SystemdError> {
         })
 }
 
+pub fn reload_systemd_daemon() -> Result<(), SystemdError> {
+    Command::new("systemctl")
+        .args(&["daemon-reload"])
+        .status()
+        .map_err(SystemdError::ExecError)
+        .and_then(|status| {
+            if !status.success() {
+                Err(SystemdError::StartError(status.code()))
+            } else {
+                Ok(())
+            }
+        })
+}
+
 pub fn service_start(service_name: &str) -> Result<(), SystemdError> {
     service_exec("start", service_name)
 }
