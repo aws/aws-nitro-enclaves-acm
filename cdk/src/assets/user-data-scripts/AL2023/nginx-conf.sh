@@ -12,7 +12,8 @@ sudo sed -i '/pid \/run\/nginx\.pid;/a\ssl_engine pkcs11;' /etc/nginx/nginx.conf
 sudo sed -i '/# Settings for a TLS enabled server./{n;:a;/^#/s///;n;ba}' /etc/nginx/nginx.conf
 sudo sed -i '/server_name/c\        server_name  DOMAIN_NAME_PLACEHOLDER;' /etc/nginx/nginx.conf
 sudo sed -i '/ssl_certificate/d; /ssl_certificate_key/d; /ssl_ciphers/d' /etc/nginx/nginx.conf
-sudo sed -i '/ssl_session_timeout/a\        ssl_protocols TLSv1.2;' /etc/nginx/nginx.conf
+sudo sed -i '/ssl_session_timeout/a\        ssl_protocols TLSv1.2 TLSv1.3;' /etc/nginx/nginx.conf
+sudo sed -i '/ssl_protocols/a\        ssl_conf_command Groups X25519MLKEM768:x25519:secp256r1;' /etc/nginx/nginx.conf
 sudo sed -i '/# Load configuration files for the default server block./a\        include "/etc/pki/nginx/nginx-acm.conf";' /etc/nginx/nginx.conf
 
 # Edit the OpenSSL configuration in /etc/pki/tls/openssl.cnf through /etc/pki/tls/openssl.d/openssl-acm.cnf
