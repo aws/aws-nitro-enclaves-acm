@@ -7,7 +7,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use nix::unistd;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -279,6 +279,30 @@ pub struct ManagedToken {
 }
 
 impl ManagedToken {
+    /// Clamp the token refresh interval so that re-attestation always happens
+    /// before the enclave expires (and auto-removes) the token from its slot.
+    /// The enclave drops a token if it is not refreshed within
+    /// `vtok_common::defs::TOKEN_EXPIRY_SECS`. Any refresh interval that is not
+    /// comfortably below that bound leaves too small a safety margin and makes
+    /// the token intermittently expire, which forces a re-provision and a
+    /// disruptive webserver restart. The effective interval is therefore capped
+    /// at half the token expiry, so at least two refresh attempts fit inside one
+    /// expiry window even with sync-tick quantization, an RPC hiccup, or clock
+    /// drift.
+    fn safe_refresh_interval(requested_secs: u64, label: &str) -> u64 {
+        let token_expiry = vtok_common::defs::TOKEN_EXPIRY_SECS;
+        let max_safe = token_expiry / 2;
+        if requested_secs > max_safe {
+            warn!(
+                "Token {}: refresh_interval_secs ({}s) leaves too small a margin under the enclave token expiry ({}s); clamping to {}s to guarantee re-attestation before expiry and avoid repeated service restarts.",
+                label, requested_secs, token_expiry, max_safe
+            );
+            max_safe
+        } else {
+            requested_secs
+        }
+    }
+
     pub fn new(
         token_config: config::Token,
         enclave: Rc<P11neEnclave>,
@@ -288,17 +312,19 @@ impl ManagedToken {
             Some(pin) => pin,
             None => util::generate_pkcs11_pin().map_err(Error::PinGenerationError)?,
         };
+        let refresh_interval_secs = Self::safe_refresh_interval(
+            token_config
+                .refresh_interval_secs
+                .unwrap_or(defs::DEFAULT_TOKEN_REFRESH_INTERVAL_SECS),
+            token_config.label.as_str(),
+        );
         Ok(Self {
             label: token_config.label,
             pin,
             db: DbSource::new(token_config.source)?,
             target: token_config.target,
             enclave,
-            refresh_interval: Duration::from_secs(
-                token_config
-                    .refresh_interval_secs
-                    .unwrap_or(defs::DEFAULT_TOKEN_REFRESH_INTERVAL_SECS),
-            ),
+            refresh_interval: Duration::from_secs(refresh_interval_secs),
             next_refresh: Instant::now(),
             service,
         })
