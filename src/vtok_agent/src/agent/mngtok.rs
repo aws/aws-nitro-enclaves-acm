@@ -342,7 +342,11 @@ impl ManagedToken {
 
         if let Some(_target) = self.target.as_ref() {
             debug!("Updating managed service configuration.");
-            return self.satisfy_target(true).or_else(|e| {
+            // An update happens while the token is already online (the cert/key
+            // material in the DB changed). The webserver only needs to re-read the
+            // renewed material, so request a graceful reload (restart_hint = false)
+            // rather than a disruptive restart.
+            return self.satisfy_target(false).or_else(|e| {
                 error!(
                     "Failed to update managed service configuration for token {}: {:?}",
                     self.label.as_str(),
@@ -497,14 +501,27 @@ impl ManagedToken {
                             &path, uid, gid, &key_uri, cert_path,
                         )?;
 
-                        restart_hint.then(|| PostSyncAction::RestartNginx)
+                        // Restore the add-vs-update split: a (re)provision (add
+                        // path, restart_hint = true) needs a full restart so nginx
+                        // comes up cleanly against the freshly added PKCS#11 token
+                        // (and is started if it was down); a cert/key change on an
+                        // already-running nginx (update path) only needs a graceful
+                        // SIGHUP reload to re-read the renewed material.
+                        Some(if restart_hint {
+                            PostSyncAction::RestartNginx
+                        } else {
+                            PostSyncAction::ReloadNginx
+                        })
                     }
                     ManagedService::Httpd => {
                         httpd::HttpdService::write_tls_entries(
                             &path, uid, gid, &key_uri, cert_path,
                         )?;
 
-                        restart_hint.then(|| PostSyncAction::RestartHttpd)
+                        // httpd has no graceful-reload path here and needs the
+                        // systemd config override applied on restart (AL2 -DFOREGROUND
+                        // PKCS#11 bug), so always restart when a target is present.
+                        Some(PostSyncAction::RestartHttpd)
                     }
                 };
                 Ok(post_action)

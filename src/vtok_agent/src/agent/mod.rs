@@ -44,6 +44,7 @@ pub struct Agent {
 pub enum PostSyncAction {
     RestartHttpd,
     RestartNginx,
+    ReloadNginx,
 }
 
 impl Agent {
@@ -192,6 +193,38 @@ impl PostSyncAction {
         match self {
             Self::RestartNginx => Self::restart_webserver("nginx", options.reload_wait_ms, None),
             Self::RestartHttpd => Self::restart_webserver("httpd", options.reload_wait_ms, Some(defs::HTTPD_OVERRIDE_DATA)),
+            Self::ReloadNginx => Self::reload_nginx(options.force_start),
+        }
+    }
+
+    /// Gracefully reload nginx so it re-reads renewed certificate material without
+    /// dropping connections. Sends SIGHUP to the running master (equivalent to
+    /// `nginx -s reload`); if nginx is not running and `force_start` is set, it is
+    /// started instead. This replaces the previous full `systemctl restart`, which
+    /// terminated in-flight connections (and could hit the systemd stop timeout ->
+    /// SIGKILL) on every certificate change.
+    fn reload_nginx(force_start: bool) {
+        let service_name = "nginx.service";
+        info!("Reloading nginx configuration.");
+        match is_service_running(service_name) {
+            Ok(pid) if pid > 0 => {
+                debug!("Sending SIGHUP to nginx PID={}", pid);
+                signal::kill(unistd::Pid::from_raw(pid), signal::Signal::SIGHUP).unwrap_or_else(
+                    |err| {
+                        error!("Error sending SIGHUP to nginx: {:?}", err);
+                    },
+                );
+            }
+            _ => {
+                if force_start {
+                    info!("nginx is not running; starting it.");
+                    service_start(service_name).unwrap_or_else(|err| {
+                        error!("Unable to start nginx: {:?}", err);
+                    });
+                } else {
+                    warn!("nginx is not running and force_start is disabled; skipping reload.");
+                }
+            }
         }
     }
 
