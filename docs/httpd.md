@@ -25,8 +25,8 @@ SSLCertificateFile ""
 </VirtualHost>
 ```
 
-> NOTE: The `SSLCertificateFile` and `SSLCertificateKeyFile` entries must be present in the configuration enabled and
-at the beginning of the configuration line (as per default `mod_ssl` ssl.conf file). The `nitro-enclaves-acm.service`
+> NOTE: The `SSLCertificateFile` and `SSLCertificateKeyFile` entries must be present in the configuration enabled, each
+on its own line (as per default `mod_ssl` ssl.conf file). Leading whitespace before the directive is accepted. The `nitro-enclaves-acm.service`
 shall scan the configuration file and update them with the correct pkcs#11 URIs after the token gets provisioned with the
 ACM certificate key.
 
