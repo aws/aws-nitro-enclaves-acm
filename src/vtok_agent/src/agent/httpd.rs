@@ -11,6 +11,23 @@ use std::os::unix::io::AsRawFd;
 pub struct HttpdService {}
 
 impl HttpdService {
+    /// Replaces the SSLCertificateKeyFile / SSLCertificateFile directives in one config line.
+    /// Leading whitespace is allowed (and kept), so indented httpd configs are rewritten too.
+    fn rewrite_tls_line(l: String, key_uri: &str, cert_path: &Option<String>) -> String {
+        let indent_len = l.len() - l.trim_start().len();
+        let (indent, directive) = l.split_at(indent_len);
+        if directive.starts_with("SSLCertificateKeyFile") {
+            format!("{}SSLCertificateKeyFile \"{}\"", indent, key_uri)
+        } else if directive.starts_with("SSLCertificateFile") {
+            match cert_path {
+                Some(cp) => format!("{}SSLCertificateFile \"{}\"", indent, cp),
+                None => l,
+            }
+        } else {
+            l
+        }
+    }
+
     pub fn write_tls_entries(
         path: &str,
         uid: Option<nix::unistd::Uid>,
@@ -27,18 +44,7 @@ impl HttpdService {
                 let reader = BufReader::new(&file);
                 for line in reader.lines() {
                     if let Ok(l) = line {
-                        let nl = {
-                            if l.starts_with("SSLCertificateKeyFile") {
-                                format!("SSLCertificateKeyFile \"{}\"", key_uri)
-                            } else if l.starts_with("SSLCertificateFile") {
-                                match cert_path {
-                                    Some(ref cp) => format!("SSLCertificateFile \"{}\"", cp),
-                                    None => l,
-                                }
-                            } else {
-                                l
-                            }
-                        };
+                        let nl = Self::rewrite_tls_line(l, key_uri, &cert_path);
                         to_write.push_str(&nl);
                         to_write.push_str("\n");
                     }
@@ -64,5 +70,47 @@ impl HttpdService {
                 Ok(())
             })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEY: &str = "pkcs11:token=acm;object=key";
+
+    #[test]
+    fn rewrites_directives_at_line_start() {
+        let cp = Some("/etc/pki/tls/certs/acm.pem".to_string());
+        assert_eq!(
+            HttpdService::rewrite_tls_line("SSLCertificateKeyFile /old.key".to_string(), KEY, &cp),
+            format!("SSLCertificateKeyFile \"{}\"", KEY)
+        );
+        assert_eq!(
+            HttpdService::rewrite_tls_line("SSLCertificateFile /old.pem".to_string(), KEY, &cp),
+            "SSLCertificateFile \"/etc/pki/tls/certs/acm.pem\""
+        );
+    }
+
+    #[test]
+    fn rewrites_indented_directives_and_keeps_indentation() {
+        let cp = Some("/etc/pki/tls/certs/acm.pem".to_string());
+        assert_eq!(
+            HttpdService::rewrite_tls_line("    SSLCertificateKeyFile /old.key".to_string(), KEY, &cp),
+            format!("    SSLCertificateKeyFile \"{}\"", KEY)
+        );
+        assert_eq!(
+            HttpdService::rewrite_tls_line("\tSSLCertificateFile /old.pem".to_string(), KEY, &cp),
+            "\tSSLCertificateFile \"/etc/pki/tls/certs/acm.pem\""
+        );
+    }
+
+    #[test]
+    fn leaves_other_lines_and_missing_cert_path_alone() {
+        let line = "  SSLCertificateFile /old.pem".to_string();
+        assert_eq!(HttpdService::rewrite_tls_line(line.clone(), KEY, &None), line);
+        for other in ["# SSLCertificateKeyFile /old.key", "  ServerName example.com", ""] {
+            assert_eq!(HttpdService::rewrite_tls_line(other.to_string(), KEY, &None), other);
+        }
     }
 }
